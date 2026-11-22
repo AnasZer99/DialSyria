@@ -1,0 +1,11 @@
+{
+  "name": "dialsyria-cron",
+  "main": "index.js",
+  "compatibility_date": "2026-11-01",
+  "triggers": {
+    "crons": ["*/30 * * * *", "7 * * * *"]
+  },
+  "vars": {
+    "SITE_URL": "https://dial-syria.pages.dev"
+  }
+}

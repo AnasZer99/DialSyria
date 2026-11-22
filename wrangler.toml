@@ -1,0 +1,11 @@
+name = "dial-syria"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dialsyria-db"
+database_id = "44b3a09f-8f64-4ea0-81e1-d79bc4af7575"
+
+[vars]
+TELEGRAM_BOT = "DialSyriaBot"
