@@ -1,0 +1,77 @@
+[
+  {
+    "id": "sham-postgrad",
+    "runId": "4ad7c408-05a8-4251-a8c9-8a57fda81eff",
+    "found": false
+  },
+  {
+    "id": "sham-registration",
+    "runId": "c158a605-1d6b-4134-88e0-9f500f17772f",
+    "found": false
+  },
+  {
+    "id": "sham-labs",
+    "runId": "e719afe3-c0da-44ef-a45d-c94ce4189fc8",
+    "found": false
+  },
+  {
+    "id": "sham-meeting",
+    "runId": "d54eccae-b084-4bd4-953f-c8b69496bbb4",
+    "found": false
+  },
+  {
+    "id": "andalus-books",
+    "runId": "46066a63-d388-441d-8f62-1b73e7c18b73",
+    "found": false
+  },
+  {
+    "id": "andalus-vacancies",
+    "runId": "d81d1b44-a36e-4345-826e-7b77581a7aee",
+    "found": false
+  },
+  {
+    "id": "andalus-studentclubs",
+    "runId": "350fe6e5-9572-4fbb-ae06-66480e20c608",
+    "found": false
+  },
+  {
+    "id": "andalus-award",
+    "runId": "104e7870-e1e9-40ef-b5d8-b9ec867bf05b",
+    "found": false
+  },
+  {
+    "id": "andalus-pharma",
+    "runId": "52a5ffd8-e353-4983-b10c-1fcaab5fb4a4",
+    "found": false
+  },
+  {
+    "id": "water-aleppo",
+    "runId": "b9686da1-e689-40d3-b471-ee9d351fba15",
+    "found": false
+  },
+  {
+    "id": "telegram-aleppo",
+    "runId": "7f74f091-7d5e-4caa-9f1e-3661f98b7c81",
+    "found": false
+  },
+  {
+    "id": "telegram-idlib",
+    "runId": "c1e09125-808c-40a1-aa9d-1a6dfcdccb55",
+    "found": true
+  },
+  {
+    "id": "telegram-deir",
+    "runId": "08555125-954b-4f6b-a00a-32410de585bf",
+    "found": true
+  },
+  {
+    "id": "telegram-health",
+    "runId": "5e78f45a-c258-4032-933f-3e7512f2e32a",
+    "found": true
+  },
+  {
+    "id": "telegram-radiology",
+    "runId": "1f04b108-7912-42ea-92ea-b7274a781abf",
+    "found": true
+  }
+]

@@ -278,7 +278,7 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
       }
 
     await env.DB.batch([
-      env.DB.prepare("UPDATE subscribers SET last_digest_at = ? WHERE id = ?").bind(now, s.id),
+      ...(status === "sent" || status === "telegram_sent" ? [env.DB.prepare("UPDATE subscribers SET last_digest_at = ? WHERE id = ?").bind(now, s.id)] : []),
       env.DB.prepare(
         "INSERT INTO digests (id, subscriber_id, sent_at, topics, articles_count, status) VALUES (?, ?, ?, ?, ?, ?)"
       ).bind(uuid(), s.id, now, topics.join(","), picked.length, status),

@@ -3,6 +3,7 @@ import { sendEmail } from "./_digest";
 
 export const onRequestPost: Handler = async ({ request, env }) => {
   if (!env.DB) return fail("database not bound", 500);
+  if (!env.BREVO_API_KEY || !env.SENDER_EMAIL) return fail("email delivery is not configured", 503);
   if (!(await rateLimit(env, "login:" + clientIp(request), 5))) return fail("too many requests", 429);
   const { email: raw } = await readJson<{ email?: string }>(request);
   const email = (raw || "").trim().toLowerCase();
@@ -27,8 +28,8 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       lang === "ar"
         ? `<div dir="rtl" style="font-family:Tahoma,Arial;font-size:15px;line-height:2;color:#1B2635;background:#FBF8F1;padding:24px;">اضغط الرابط لإدارة اشتراكك:<br/><a href="${manageUrl}" style="color:#9C4A3C;font-weight:bold;">إدارة الاشتراك ↗</a></div>`
         : `<div dir="ltr" style="font-family:Tahoma,Arial;font-size:15px;line-height:2;color:#1B2635;background:#FBF8F1;padding:24px;">Click the link to manage your subscription:<br/><a href="${manageUrl}" style="color:#9C4A3C;font-weight:bold;">Manage subscription ↗</a></div>`;
-    await sendEmail(env, email, subject, bodyHtml);
+    if (!(await sendEmail(env, email, subject, bodyHtml))) return fail("could not send access email", 503);
   }
 
-  return json({ ok: true, manage_url: providerConfigured ? undefined : manageUrl });
+  return json({ ok: true });
 };

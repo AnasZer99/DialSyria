@@ -89,6 +89,7 @@ interface RssItem {
   pubDate?: string;
   description?: string;
   source?: string;
+  sourceUrl?: string;
 }
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -149,6 +150,7 @@ export function parseFeed(xml: string): RssItem[] {
       pubDate: pick(b, "pubDate") || undefined,
       description: pick(b, "description") || undefined,
       source: pick(b, "source") || undefined,
+      sourceUrl: unescape(b.match(/<source\s+[^>]*url=["']([^"']+)["']/i)?.[1] || "") || undefined,
     });
   }
   return items;

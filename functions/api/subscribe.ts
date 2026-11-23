@@ -3,6 +3,7 @@ import { sendEmail } from "./_digest";
 
 export const onRequestPost: Handler = async ({ request, env }) => {
   if (!env.DB) return fail("database not bound", 500);
+  if (!env.BREVO_API_KEY || !env.SENDER_EMAIL) return fail("email delivery is not configured", 503);
   if (!(await rateLimit(env, "sub:" + clientIp(request), 10))) return fail("too many requests", 429);
   const body = await readJson<{ email?: string; topics?: string[]; delivery_hour?: number; language?: string; whatsapp?: string }>(request);
 
@@ -23,21 +24,14 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   const existing = await env.DB.prepare("SELECT id FROM subscribers WHERE email = ?").bind(email).first<{ id: string }>();
 
   if (existing) {
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE subscribers SET whatsapp=?, language=?, delivery_hour=?, magic_token=?, magic_expires=? WHERE id=?"
-      ).bind(whatsapp, language, hour, token, magicExpiry, existing.id),
-      env.DB.prepare("DELETE FROM subscriber_topics WHERE subscriber_id=?").bind(existing.id),
-      ...topics.map((x) =>
-        env.DB.prepare("INSERT INTO subscriber_topics (subscriber_id, topic) VALUES (?, ?)").bind(existing.id, x)
-      ),
-    ]);
+    // Existing account preferences may only be changed through an authenticated link.
+    return json({ ok: true });
   } else {
     const id = uuid();
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO subscribers (id, email, whatsapp, language, delivery_hour, status, trial_ends_at, created_at, magic_token, magic_expires) VALUES (?,?,?,?,?,?,?,?,?,?)"
-      ).bind(id, email, whatsapp, language, hour, "pending", null, nowISO(), token, magicExpiry),
+      ).bind(id, email, whatsapp, language, hour, "trial", daysFromNow(3), nowISO(), token, magicExpiry),
       ...topics.map((x) =>
         env.DB.prepare("INSERT INTO subscriber_topics (subscriber_id, topic) VALUES (?, ?)").bind(id, x)
       ),
@@ -53,8 +47,8 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       language === "ar"
         ? `<div dir="rtl" style="font-family:Tahoma,Arial;font-size:15px;line-height:2;color:#1B2635;background:#FBF8F1;padding:24px;"><b>مرحباً بك في ديل سيريا</b><br/>بدأت تجربتك المجانية لمدة 3 أيام، وستصلك نشرة اليومية في الوقت الذي اخترته.<br/><a href="${manageUrl}" style="color:#9C4A3C;font-weight:bold;">إدارة الاشتراك والوقت والمواضيع ↗</a></div>`
         : `<div dir="ltr" style="font-family:Tahoma,Arial;font-size:15px;line-height:2;color:#1B2635;background:#FBF8F1;padding:24px;"><b>Welcome to DialSyria</b><br/>Your free 3-day trial has started, and your daily digest arrives at your chosen time.<br/><a href="${manageUrl}" style="color:#9C4A3C;font-weight:bold;">Manage your subscription ↗</a></div>`;
-    await sendEmail(env, email, subject, bodyHtml);
+    if (!(await sendEmail(env, email, subject, bodyHtml))) return fail("could not send access email; request a new login link", 503);
   }
 
-  return json({ ok: true, manage_url: providerConfigured ? undefined : manageUrl });
+  return json({ ok: true });
 };
