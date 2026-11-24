@@ -4,4 +4,5 @@ dist/
 logs/
 *.log
 .wrangler/
+worker-configuration.d.ts
 *.txt

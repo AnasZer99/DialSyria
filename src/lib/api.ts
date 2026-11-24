@@ -25,6 +25,13 @@ export interface Subscriber {
   topics: Topic[];
 }
 
+export interface Interest {
+  id: string;
+  text: string;
+  created_at: string;
+  updated_at: string;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -47,6 +54,16 @@ export const api = {
     req<{ ok: boolean }>("/api/me?token=" + encodeURIComponent(token), { method: "DELETE" }),
   news: () => req<{ articles: Article[] }>("/api/news"),
   config: () => req<{ telegram_bot: string | null }>("/api/config"),
+  createTelegramLink: (token: string) =>
+    req<{ token: string; expires_at: string }>("/api/telegram/link", { method: "POST", headers: { authorization: "Bearer " + token } }),
+  interests: (token: string) =>
+    req<{ interests: Interest[] }>("/api/interests", { headers: { authorization: "Bearer " + token } }),
+  addInterest: (token: string, text: string) =>
+    req<{ interest: Interest }>("/api/interests", { method: "POST", headers: { authorization: "Bearer " + token }, body: JSON.stringify({ text }) }),
+  updateInterest: (token: string, id: string, text: string) =>
+    req<{ ok: boolean }>("/api/interests", { method: "PATCH", headers: { authorization: "Bearer " + token }, body: JSON.stringify({ id, text }) }),
+  deleteInterest: (token: string, id: string) =>
+    req<{ ok: boolean }>("/api/interests?id=" + encodeURIComponent(id), { method: "DELETE", headers: { authorization: "Bearer " + token } }),
 };
 
 export const adminApi = {

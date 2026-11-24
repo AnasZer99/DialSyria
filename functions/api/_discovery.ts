@@ -23,7 +23,9 @@ export function generateQueries(interest: string, monitoredHosts: string[] = [])
   const place = cityOf(interest) || "سوريا";
   const original = interest.trim().replace(/\s+/g," ");
   const expansions = words(interest).filter(w => normalize(place) !== w).map(w => group(w).find(x => x !== w) || w);
-  const candidates = [original, `${expansions.join(" ")} ${place}`, `${original} قرارات تحديثات`, ...monitoredHosts.slice(0, 1).map(h => `${original} site:${h}`)];
+  // Reserved .test domains come from deterministic mock discovery and must never reach live queries.
+  const liveHosts = monitoredHosts.filter(h => !/(?:^|\.)test$/i.test(h));
+  const candidates = [original, `${expansions.join(" ")} ${place}`, `${original} قرارات تحديثات`, ...liveHosts.slice(0, 1).map(h => `${original} site:${h}`)];
   return [...new Set(candidates.map(x => x.trim()).filter(Boolean))].slice(0, 4);
 }
 function canonical(url: string): string | null { try { const u = new URL(url); if (!['http:','https:'].includes(u.protocol) || u.username || u.password) return null; u.hash = ''; for (const key of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid)/i.test(key)) u.searchParams.delete(key); u.hostname = u.hostname.toLowerCase(); return u.toString(); } catch { return null; } }
@@ -82,7 +84,27 @@ export async function search(query: string, key: string | undefined, fetcher: Fe
   const r = await request(fetcher, `https://news.google.com/rss/search?${q}`);
   return { provider:'google-news-rss', warning, items:parseFeed(await r.text()).map(x=>({title:x.title,url:x.link,source:x.source || '',sourceUrl:x.sourceUrl,description:x.description || '',publishedAt:date(x.pubDate),provider:'google-news-rss'})) };
 }
-export async function runDiscovery(db: Database, interest: string, opts: {key?:string; fetcher?:Fetch} = {}) {
+
+// Deterministic mock provider: credential-free sample data for integration runs.
+// Clearly separated from live providers: items carry provider 'mock', the run
+// report is marked mock, and no network I/O is performed.
+const MOCK_SOURCE = 'https://mock-source.test';
+const MOCK_ITEMS: Candidate[] = [
+  { title:'قرار ترخيص البناء في إدلب', url:MOCK_SOURCE+'/news/idlib-building-licence', source:'مصدر تجريبي', sourceUrl:MOCK_SOURCE, description:'ضوابط جديدة لتراخيص البناء في محافظة إدلب', publishedAt:null, provider:'mock' },
+  { title:'قرار ترخيص البناء في حلب', url:MOCK_SOURCE+'/news/aleppo-building-licence', source:'مصدر تجريبي', sourceUrl:MOCK_SOURCE, description:'ضوابط جديدة لتراخيص البناء في محافظة حلب', publishedAt:null, provider:'mock' },
+];
+async function mockSearch(): Promise<{items:Candidate[]; provider:string; warning?:string}> {
+  return { provider:'mock', items:MOCK_ITEMS.map(x=>({...x})) };
+}
+const mockFetch: Fetch = async (input) => {
+  const u = new URL(String(input));
+  if (u.hostname !== 'mock-source.test') return new Response(null,{status:404});
+  if (u.pathname === '/robots.txt') return new Response(null,{status:404});
+  const item = MOCK_ITEMS.find(x => x.url === u.origin + u.pathname) || MOCK_ITEMS[0];
+  const title = item.title.replace(/"/g,'&quot;');
+  return new Response(`<!doctype html><html><head><meta property="og:title" content="${title}"><meta property="article:published_time" content="2026-11-20T10:00:00Z"></head><body><article>${title} — نص تجريبي ثابت للتحقق من حفظ المصدر.</article></body></html>`,{status:200,headers:{'content-type':'text/html'}});
+};
+export async function runDiscovery(db: Database, interest: string, opts: {key?:string; fetcher?:Fetch; mock?:boolean} = {}) {
   interest = interest.trim(); if (interest.length < 3 || interest.length > 300) throw new Error('Interest must be between 3 and 300 characters');
   const interestKey = normalize(interest); const started = new Date().toISOString(); const runId = crypto.randomUUID();
   const hosts = await db.prepare('SELECT host FROM discovery_source_interests WHERE interest_key = ? LIMIT 1').bind(interestKey).all<{host:string}>();
@@ -90,14 +112,16 @@ export async function runDiscovery(db: Database, interest: string, opts: {key?:s
   await db.prepare('INSERT INTO discovery_runs (id, interest, started_at) VALUES (?, ?, ?)').bind(runId, interest, started).run();
   const decisions: Decision[] = []; const errors: string[] = []; const warnings = new Set<string>(); let duplicates = 0;
   const inspected = new Map<string,Provenance>();
-  if (!opts.key) warnings.add('No Brave key: Google News RSS coverage is limited to indexed news.');
+  const fetcher = opts.mock ? mockFetch : opts.fetcher;
+  if (opts.mock) warnings.add('Mock discovery: deterministic sample data; results are not live search output.');
+  else if (!opts.key) warnings.add('No Brave key: Google News RSS coverage is limited to indexed news.');
   for (const query of queries) {
-    try { const result = await search(query,opts.key,opts.fetcher); if (result.warning) warnings.add(result.warning);
+    try { const result = opts.mock ? await mockSearch() : await search(query,opts.key,opts.fetcher); if (result.warning) warnings.add(result.warning);
       for (const item of result.items) { const d = evaluate(interest,item); decisions.push(d); if (!d.accepted) continue;
         if (!inspected.has(d.url) && inspected.size < 8) {
-          let provenance=await inspectPublisher(d.url,d.sourceUrl,opts.fetcher);
+          let provenance=await inspectPublisher(d.url,d.sourceUrl,fetcher);
           if (!provenance.originalUrl && provenance.googleNewsUrl && d.sourceUrl) {
-            const secondary=await lookupPublisherFeed(d.title,d.source,d.sourceUrl,provenance.googleNewsUrl,d.publishedAt,opts.fetcher);
+            const secondary=await lookupPublisherFeed(d.title,d.source,d.sourceUrl,provenance.googleNewsUrl,d.publishedAt,fetcher);
             if (secondary) provenance=secondary;
             else provenance.resolutionStatus += '; publisher_feed_no_verified_match';
           }
@@ -107,7 +131,7 @@ export async function runDiscovery(db: Database, interest: string, opts: {key?:s
         else d.resolutionStatus = 'inspection_budget_exhausted';
         const id = crypto.randomUUID(); const titleKey = normalize(d.title); const sourceUrl = canonical(d.sourceUrl || ''); const sourceHost = sourceUrl ? new URL(sourceUrl).hostname : null;
         const host = d.originalUrl ? new URL(d.originalUrl).hostname : sourceHost && sourceHost !== 'news.google.com' ? sourceHost : null;
-        const insert = await db.prepare('INSERT OR IGNORE INTO discovery_items (id,url,title_key,title,description,source,published_at,discovered_at,source_host) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,d.url,titleKey,d.title,d.description,d.source,d.publishedAt,started,host).run();
+        const insert = await db.prepare('INSERT OR IGNORE INTO discovery_items (id,url,title_key,title,description,source,published_at,discovered_at,source_host,is_mock) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id,d.url,titleKey,d.title,d.description,d.source,d.publishedAt,started,host,opts.mock ? 1 : 0).run();
         const existing = insert.meta.changes ? {id} : await db.prepare('SELECT id FROM discovery_items WHERE url = ? OR title_key = ? LIMIT 1').bind(d.url,titleKey).first<{id:string}>();
         if (!insert.meta.changes) { d.duplicate = true; duplicates++; d.reason += '; duplicate'; }
         if (existing) await db.prepare("UPDATE discovery_items SET google_news_url=COALESCE(?,google_news_url), original_url=COALESCE(?,original_url), resolution_status=CASE WHEN ? IS NULL AND original_url IS NOT NULL THEN resolution_status ELSE ? END, publisher_title=COALESCE(?,publisher_title), publisher_published_at=COALESCE(?,publisher_published_at), verification_status=CASE WHEN ? IS NULL AND publisher_title IS NOT NULL THEN verification_status ELSE ? END WHERE id=?").bind(d.googleNewsUrl,d.originalUrl,d.originalUrl,d.resolutionStatus,d.publisherTitle,d.publisherPublishedAt,d.publisherTitle,d.verificationStatus,existing.id).run();
@@ -116,7 +140,7 @@ export async function runDiscovery(db: Database, interest: string, opts: {key?:s
       }
     } catch (e) { const cause = e instanceof Error ? e.cause : undefined; errors.push(`${query}: ${String(e)}${cause ? `; cause: ${String(cause)}` : ''}`); if (String(e).includes('HTTP 429')) break; }
   }
-  const report = {runId, interest, started, queries, decisions, duplicates, errors, warnings:[...warnings], incomplete:errors.length>0};
+  const report = {runId, interest, started, queries, decisions, duplicates, errors, warnings:[...warnings], incomplete:errors.length>0, mock: opts.mock === true};
   await db.prepare('UPDATE discovery_runs SET finished_at=?, report=? WHERE id=?').bind(new Date().toISOString(),JSON.stringify(report),runId).run();
   return report;
 }

@@ -15,6 +15,12 @@ test('query generation and location-aware relevance', () => {
   assert.equal(engine.evaluate('المؤتمرات الطبية للتصوير الشعاعي في دمشق',radiology).accepted,true);
 });
 
+test('test domains never enter live discovery queries', () => {
+  const queries = engine.generateQueries('قرارات البناء والتراخيص في إدلب', ['mock-source.test', 'example.org']);
+  assert.ok(!queries.some((q) => q.includes('mock-source.test')));
+  assert.ok(queries.some((q) => q.includes('site:example.org')));
+});
+
 test('RSS parser, storage, source monitoring and repeated runs', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
   const interest = 'قرارات البناء والتراخيص في إدلب';

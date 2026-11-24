@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Subscriber } from "../lib/api";
+import { api, type Interest, type Subscriber } from "../lib/api";
 import { t, TOPICS, type Lang, type Topic } from "../lib/i18n";
 import type { PageProps } from "../App";
 
@@ -16,6 +16,13 @@ export default function Manage({ lang }: PageProps) {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tgBot, setTgBot] = useState<string | null>(null);
+  const [tgLinkBusy, setTgLinkBusy] = useState(false);
+  const [interests, setInterests] = useState<Interest[]>([]);
+  const [interestInput, setInterestInput] = useState("");
+  const [interestError, setInterestError] = useState("");
+  const [interestBusy, setInterestBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   useEffect(() => {
     api.config().then((c) => setTgBot(c.telegram_bot)).catch(() => setTgBot(null));
@@ -43,6 +50,21 @@ export default function Manage({ lang }: PageProps) {
       .catch(() => setState("invalid"));
   }, [token]);
 
+  const refreshInterests = async () => {
+    if (!token) return;
+    try {
+      const r = await api.interests(token);
+      setInterests(r.interests);
+    } catch {
+      setInterestError(t(lang, "errorGeneric"));
+    }
+  };
+
+  useEffect(() => {
+    if (state === "ready" && token) void refreshInterests();
+    // Refresh once the authenticated profile is available.
+  }, [state, token]);
+
   const toggleTopic = (x: Topic) => {
     setTopics((prev) => {
       const next = new Set(prev);
@@ -68,6 +90,21 @@ export default function Manage({ lang }: PageProps) {
       setError(t(lang, "errorGeneric"));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const openTelegramLink = async () => {
+    if (!token || !tgBot || tgLinkBusy) return;
+    setError("");
+    setTgLinkBusy(true);
+    try {
+      // Short-lived single-use link token: the management token never leaves this request.
+      const r = await api.createTelegramLink(token);
+      window.open(`https://t.me/${tgBot}?start=${encodeURIComponent(r.token)}`, "_blank", "noopener");
+    } catch {
+      setError(t(lang, "errorGeneric"));
+    } finally {
+      setTgLinkBusy(false);
     }
   };
 
@@ -99,6 +136,75 @@ export default function Manage({ lang }: PageProps) {
       setError(t(lang, "errorGeneric"));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const interestErrorMessage = (e: unknown): string => {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === "interest limit reached") return t(lang, "interestLimit");
+    if (msg === "interest already exists") return t(lang, "interestDuplicate");
+    if (msg === "interest must contain 3 to 300 characters of text") return t(lang, "interestInvalid");
+    return t(lang, "errorGeneric");
+  };
+
+  const addInterest = async () => {
+    if (!token || interestBusy) return;
+    const text = interestInput.trim();
+    if (text.length < 3 || text.length > 300) { setInterestError(t(lang, "interestInvalid")); return; }
+    setInterestError("");
+    setInterestBusy(true);
+    try {
+      await api.addInterest(token, text);
+      setInterestInput("");
+      await refreshInterests();
+    } catch (e) {
+      setInterestError(interestErrorMessage(e));
+    } finally {
+      setInterestBusy(false);
+    }
+  };
+
+  const startEditInterest = (item: Interest) => {
+    setEditingId(item.id);
+    setEditingText(item.text);
+    setInterestError("");
+  };
+
+  const cancelEditInterest = () => {
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  const saveInterest = async () => {
+    if (!token || !editingId || interestBusy) return;
+    const text = editingText.trim();
+    if (text.length < 3 || text.length > 300) { setInterestError(t(lang, "interestInvalid")); return; }
+    setInterestError("");
+    setInterestBusy(true);
+    try {
+      await api.updateInterest(token, editingId, text);
+      setEditingId(null);
+      setEditingText("");
+      await refreshInterests();
+    } catch (e) {
+      setInterestError(interestErrorMessage(e));
+    } finally {
+      setInterestBusy(false);
+    }
+  };
+
+  const removeInterest = async (id: string) => {
+    if (!token || interestBusy) return;
+    setInterestError("");
+    setInterestBusy(true);
+    try {
+      await api.deleteInterest(token, id);
+      if (editingId === id) cancelEditInterest();
+      await refreshInterests();
+    } catch (e) {
+      setInterestError(interestErrorMessage(e));
+    } finally {
+      setInterestBusy(false);
     }
   };
 
@@ -142,15 +248,9 @@ export default function Manage({ lang }: PageProps) {
           <div style={{ fontWeight: 400, fontSize: 12, color: "var(--muted)" }}>{t(lang, "tgLinkedHint")}</div>
         </div>
       ) : tgBot && token ? (
-        <a
-          className="cta"
-          style={{ marginTop: 14 }}
-          href={`https://t.me/${tgBot}?start=${encodeURIComponent(token)}`}
-          target="_blank"
-          rel="noreferrer"
-        >
+        <button className="cta" style={{ marginTop: 14 }} onClick={() => void openTelegramLink()} disabled={tgLinkBusy}>
           {t(lang, "tgLink")}
-        </a>
+        </button>
       ) : null}
 
       <div className="step"><span className="ltr">1</span> {t(lang, "stepTopics")}</div>
@@ -196,6 +296,47 @@ export default function Manage({ lang }: PageProps) {
       </button>
       {saved && <div className="note" style={{ color: "var(--deep)", fontWeight: 700 }}>{t(lang, "saved")}</div>}
       {error && <div className="err">{error}</div>}
+
+      <div className="step" style={{ marginTop: 24 }}>{t(lang, "interestsTitle")}</div>
+      <div className="note">{t(lang, "interestsHint")}</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <input
+          className="field"
+          style={{ flex: 1, minWidth: 0 }}
+          value={interestInput}
+          maxLength={300}
+          placeholder={t(lang, "interestPlaceholder")}
+          onChange={(e) => { setInterestInput(e.target.value); setInterestError(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter") void addInterest(); }}
+        />
+        <button className="abtn primary" style={{ flex: "none", padding: "0 16px" }} onClick={() => void addInterest()} disabled={interestBusy}>
+          {t(lang, "interestAdd")}
+        </button>
+      </div>
+      {interestError && <div className="err" style={{ textAlign: "start" }}>{interestError}</div>}
+      <ul className="interest-list">
+        {interests.map((item) =>
+          editingId === item.id ? (
+            <li key={item.id} className="interest-item">
+              <input className="field" value={editingText} maxLength={300} onChange={(e) => setEditingText(e.target.value)} />
+              <div className="interest-actions">
+                <button className="abtn primary" onClick={() => void saveInterest()} disabled={interestBusy}>{t(lang, "saveBtn")}</button>
+                <button className="abtn" onClick={cancelEditInterest} disabled={interestBusy}>{t(lang, "interestCancel")}</button>
+              </div>
+            </li>
+          ) : (
+            <li key={item.id} className="interest-item">
+              <span className="interest-text">{item.text}</span>
+              <div className="interest-actions">
+                <button className="abtn" onClick={() => startEditInterest(item)} disabled={interestBusy}>{t(lang, "interestEdit")}</button>
+                <button className="abtn danger" onClick={() => void removeInterest(item.id)} disabled={interestBusy}>{t(lang, "interestDelete")}</button>
+              </div>
+            </li>
+          )
+        )}
+      </ul>
+      {interests.length === 0 && <div className="note">{t(lang, "interestEmpty")}</div>}
+      <div className="counter ltr">{interests.length}/10</div>
 
       <div className="rule" style={{ marginTop: 24 }}></div>
       <button className="abtn danger" onClick={cancel} disabled={busy}>

@@ -71,7 +71,7 @@ export const onRequestPatch: Handler = async ({ request, env }) => {
   }
 
   const sets: string[] = [];
-  const vals: (string | number)[] = [];
+  const vals: (string | number | null)[] = [];
   if (typeof body.delivery_hour === "number" && Number.isInteger(body.delivery_hour) && body.delivery_hour >= 0 && body.delivery_hour <= 23) {
     sets.push("delivery_hour=?");
     vals.push(body.delivery_hour);

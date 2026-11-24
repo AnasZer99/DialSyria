@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/*.test.mjs",
+    "typecheck:backend": "wrangler types worker-configuration.d.ts --env-interface DialSyriaCloudflareEnv && tsc -p tsconfig.backend.json",
     "deploy": "npm run build && wrangler pages deploy dist --project-name Dial-Syria",
     "db:schema": "wrangler d1 execute dialsyria-db --remote --file=schema.sql"
   },

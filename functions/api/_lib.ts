@@ -8,6 +8,12 @@ export interface Env {
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   TELEGRAM_BOT?: string;
+  /** Server-side only: enables real Telegram delivery from the notify workflow. Never set by default. */
+  TELEGRAM_DELIVERY_ENABLED?: string;
+  /** Server-side only: comma-separated Telegram chat IDs permitted during controlled delivery tests. */
+  TELEGRAM_TEST_CHAT_IDS?: string;
+  /** Test/demo only: enables the deterministic mock discovery endpoint. Never set in production. */
+  ALLOW_MOCK_DISCOVERY?: string;
 }
 
 export type PagesContext<C = Env> = { request: Request; env: C; params: Record<string, string>; waitUntil: (promise: Promise<unknown>) => void };

@@ -1,5 +1,6 @@
 import { Env, Handler, json, siteUrl, tgSend, tgSendLong, uuid, nowISO, type Topic } from "./_lib";
 import { pickSections, digestText } from "./_digest";
+import { notificationDetails } from "./_notify";
 
 interface TgUpdate {
   message?: { text?: string; chat?: { id: number } };
@@ -22,6 +23,24 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   const chatId = String(msg.chat.id);
   const text = (msg.text || "").trim();
   if (!text.startsWith("/start")) {
+    // /more <notification-id>: details of a notification owned by the linked subscriber.
+    // Details come only from stored fields; nothing is fetched or invented.
+    if (text.startsWith("/more")) {
+      const notificationId = text.split(/\s+/)[1] || "";
+      const linked = await env.DB.prepare("SELECT id FROM subscribers WHERE telegram_chat_id = ?").bind(chatId).first<{ id: string }>();
+      if (!linked) {
+        await tgSend(env, chatId, "حسابك غير مرتبط بعد.\nاشترك من الموقع ثم اربط تيليجرام من صفحة الإدارة:\n" + siteUrl(env) + "/manage");
+        return json({ ok: true });
+      }
+      if (!notificationId) {
+        await tgSend(env, chatId, "استخدم: /more <معرف التحديث> لإظهار تفاصيل التحديث.");
+        return json({ ok: true });
+      }
+      // Owner-scoped lookup: unknown, expired and foreign references share one safe reply.
+      const details = await notificationDetails(env.DB, linked.id, notificationId);
+      await tgSend(env, chatId, details ? details.text : "لا يوجد تحديث بهذا المعرف يخص حسابك.");
+      return json({ ok: true });
+    }
     // أمر النشرة الفورية: مرة واحدة كل 24 ساعة، ويُحتسب نسخة اليوم
     // (يُسجَّل الاستلام فيتجاوز الموعد المجدول حتى اليوم التالي)
     if (text.startsWith("/news") || text === "أخبار" || text === "الأخبار" || text === "الاخبار") {
@@ -83,35 +102,45 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       await tgSend(
         env,
         chatId,
-        "الأوامر المتاحة:\n/news — أرسل نشرتك فوراً\n\nوستصلك نشرتك اليومية تلقائياً في الوقت الذي اخترته."
+        "الأوامر المتاحة:\n/news — أرسل نشرتك فوراً\n/more <معرف> — تفاصيل تحديث\n\nوستصلك نشرتك اليومية تلقائياً في الوقت الذي اخترته."
       );
     }
     return json({ ok: true });
   }
 
   const token = text.split(/\s+/)[1] || "";
-  if (token) {
-    const row = await env.DB.prepare("SELECT id FROM subscribers WHERE magic_token = ?").bind(token).first<{ id: string }>();
-    if (row) {
-      await env.DB.prepare("UPDATE subscribers SET telegram_chat_id = ? WHERE id = ?").bind(chatId, row.id).run();
-      await tgSend(
-        env,
-        chatId,
-        "تم ربط حسابك بنجاح ✓\nستصلك نشرة ديل سيريا يومياً في الوقت الذي اخترته.\nلإدارة اشتراكك:\n" +
-          siteUrl(env) +
-          "/manage?token=" +
-          token
-      );
-    } else {
-      await tgSend(env, chatId, "رابط غير صالح. افتح صفحة إدارة الاشتراك من موقعنا ثم اربط من جديد.");
-    }
-  } else {
+  if (!token) {
     await tgSend(
       env,
       chatId,
-      "مرحباً بك في ديل سيريا 🗞️\nأنشئ اشتراكك من الموقع ثم اربط حسابك من صفحة الإدارة:\n" + siteUrl(env)
+      "مرحباً بك في ديل سيريا 🗞️\nأنشئ اشتراكك من الموقع ثم اربط حسابك من صفحة الإدارة:\n" + siteUrl(env) + "/manage"
     );
+    return json({ ok: true });
   }
+  // Linking accepts short-lived single-use tokens only. Management tokens are never
+  // accepted here, and no token is ever echoed back into a Telegram message.
+  const now = nowISO();
+  const claimed = await env.DB.prepare(
+    "UPDATE telegram_link_tokens SET used_at=? WHERE token=? AND used_at IS NULL AND expires_at > ?"
+  ).bind(now, token, now).run();
+  const link = claimed.meta.changes
+    ? await env.DB.prepare("SELECT subscriber_id FROM telegram_link_tokens WHERE token=?").bind(token).first<{ subscriber_id: string }>()
+    : null;
+  if (!link) {
+    await tgSend(env, chatId, "رابط الربط غير صالح أو منتهي الصلاحية. اطلب رابطاً جديداً من صفحة إدارة الاشتراك.");
+    return json({ ok: true });
+  }
+  const conflict = await env.DB.prepare("SELECT id FROM subscribers WHERE telegram_chat_id=? AND id<>? LIMIT 1").bind(chatId, link.subscriber_id).first<{ id: string }>();
+  if (conflict) {
+    await tgSend(env, chatId, "هذا الحساب مرتبط بمشترك آخر. استخدم حسابك الصحيح أو تواصل مع الإدارة.");
+    return json({ ok: true });
+  }
+  await env.DB.prepare("UPDATE subscribers SET telegram_chat_id=? WHERE id=?").bind(chatId, link.subscriber_id).run();
+  await tgSend(
+    env,
+    chatId,
+    "تم ربط حسابك بنجاح ✓\nستصلك تحديثات اهتماماتك على تيليجرام.\nلإدارة اشتراكك:\n" + siteUrl(env) + "/manage"
+  );
   // تيليجرام يطلب 200 دائماً وإلا أعاد المحاولة
   return json({ ok: true });
 };
