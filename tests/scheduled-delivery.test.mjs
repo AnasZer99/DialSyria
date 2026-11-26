@@ -153,10 +153,16 @@ test('the cron worker schedules digest, ingestion and notification delivery', as
 
     calls.length = 0;
     const pending2 = [];
-    await cron.scheduled({ cron: '*/30 * * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending2.push(p) });
+    await cron.scheduled({ cron: '0 1 * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending2.push(p) });
     await Promise.all(pending2);
     assert.ok(calls.some((c) => c.url.endsWith('/api/ingest')));
-    assert.ok(calls.some((c) => c.url.endsWith('/api/direct')));
+    assert.ok(!calls.some((c) => c.url.endsWith('/api/direct'))); // sweep isolated from the MVP cron
+
+    calls.length = 0;
+    const pending3 = [];
+    await cron.scheduled({ cron: '*/30 * * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending3.push(p) });
+    await Promise.all(pending3);
+    assert.equal(calls.length, 0); // retired schedule: no calls
   } finally { globalThis.fetch = original; }
 });
 
@@ -190,10 +196,10 @@ test('scheduled calls log non-success HTTP statuses without exposing secrets', a
       return new Response('{}', { status: 200 });
     };
     const pending = [];
-    await cron.scheduled({ cron: '*/30 * * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending.push(p) });
+    await cron.scheduled({ cron: '0 1 * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending.push(p) });
     await Promise.all(pending);
     assert.ok(logs.some((l) => l.includes('401') && l.includes('/api/ingest')));
-    assert.ok(logs.some((l) => l.includes('429') && l.includes('/api/direct')));
+    assert.ok(!logs.some((l) => l.includes('/api/direct'))); // isolated: never called by the MVP cron
 
     logs.length = 0;
     const pending2 = [];

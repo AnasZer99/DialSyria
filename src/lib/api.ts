@@ -9,6 +9,21 @@ export interface Article {
   topic: Topic;
   scope: "syria" | "global";
   published_at: string | null;
+  fetched_at?: string;
+}
+
+export interface NewsQuery {
+  scope?: "syria" | "global";
+  topic?: Topic;
+  page?: number;
+  limit?: number;
+}
+
+export interface NewsPage {
+  articles: Article[];
+  page: number;
+  limit: number;
+  has_more: boolean;
 }
 
 export interface Subscriber {
@@ -64,7 +79,15 @@ export const api = {
     req<{ ok: boolean }>("/api/me?token=" + encodeURIComponent(token), { method: "PATCH", body: JSON.stringify(p) }),
   cancelMe: (token: string) =>
     req<{ ok: boolean }>("/api/me?token=" + encodeURIComponent(token), { method: "DELETE" }),
-  news: () => req<{ articles: Article[] }>("/api/news"),
+  news: (p: NewsQuery = {}) => {
+    const qs = new URLSearchParams();
+    if (p.scope) qs.set("scope", p.scope);
+    if (p.topic) qs.set("topic", p.topic);
+    if (p.page) qs.set("page", String(p.page));
+    if (p.limit) qs.set("limit", String(p.limit));
+    const suffix = qs.size ? "?" + qs.toString() : "";
+    return req<NewsPage>("/api/news" + suffix);
+  },
   config: () => req<{ telegram_bot: string | null }>("/api/config"),
   createTelegramLink: (token: string) =>
     req<{ token: string; expires_at: string }>("/api/telegram/link", { method: "POST", headers: { authorization: "Bearer " + token } }),

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DialSyria — معاينة تصميم MVP (Provisional)</title>
+<style>
+  :root{--paper:#FBF8F1;--paper2:#F1EADB;--ink:#1B2635;--deep:#1D2E44;--brick:#9C4A3C;--rule:#D9D0BD;--muted:#5C6672;--cream:#F7F3EA;--hairline:#C4B294}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#EFE9DB;color:var(--ink);font-family:"Segoe UI","Noto Naskh Arabic",Tahoma,Arial,sans-serif;line-height:1.8;font-size:15px}
+  .wrap{max-width:1060px;margin-inline:auto;padding-inline:20px}
+  .note{max-width:1060px;margin:18px auto 0;padding:10px 14px;border:1px dashed var(--hairline);border-radius:8px;background:#fff;font-size:12.5px;color:var(--muted)}
+  .frame{max-width:1060px;margin:14px auto 26px;background:var(--paper);border:1px solid var(--rule);border-radius:14px;overflow:hidden;box-shadow:0 6px 22px rgba(29,46,68,.07)}
+  header .head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:2px solid var(--deep)}
+  .logo{font-size:24px;font-weight:700;color:var(--deep);font-family:Georgia,"Times New Roman",serif}
+  .logo b{color:var(--brick)}
+  nav{display:flex;gap:4px;flex-wrap:wrap}
+  nav a{font-size:13px;font-weight:600;color:var(--deep);text-decoration:none;padding:6px 10px;border-radius:5px}
+  nav a.active{background:var(--paper2);color:var(--brick)}
+  .lang{border:1px solid var(--brick);color:var(--deep);background:none;border-radius:4px;padding:4px 12px;font-size:12px;font-weight:600}
+  main{padding:0 20px 8px}
+  .hero{padding-top:22px}
+  .kicker{font-size:11.5px;font-weight:600;color:var(--brick);display:flex;align-items:center;gap:10px}
+  .kicker::after{content:"";flex:1;height:1px;background:var(--rule)}
+  h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(26px,4vw,38px);line-height:1.45;margin:10px 0 6px}
+  .sub{color:var(--muted);max-width:560px;margin-bottom:14px}
+  .cta{display:inline-flex;align-items:center;justify-content:center;height:46px;padding:0 20px;background:var(--deep);color:var(--cream);font-weight:700;border-radius:6px;border:1px solid var(--deep)}
+  .rule{height:2px;background:var(--deep);margin:22px 0 10px}
+  .filters{display:grid;gap:8px;margin:10px 0 2px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:13.5px;font-weight:600;border:1px solid var(--hairline);border-radius:5px;padding:8px 14px;background:#fff;color:var(--ink)}
+  .chip.on{background:var(--deep);color:var(--cream);border-color:var(--deep)}
+  .chip.sm{font-size:12.5px;padding:6px 11px}
+  .sec{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;margin-top:16px}
+  .sec a{color:var(--brick);font-size:12px;text-decoration:none}
+  .grid{display:grid;gap:14px;margin-top:10px;grid-template-columns:1fr}
+  @media(min-width:640px){.grid{grid-template-columns:1fr 1fr}}
+  @media(min-width:980px){.grid{grid-template-columns:1fr 1fr 1fr}}
+  .card{border:1px solid var(--rule);border-radius:10px;background:#fff;padding:16px;display:flex;flex-direction:column;gap:8px}
+  .tags{display:flex;gap:6px}
+  .tag{font-size:10.5px;font-weight:600;color:var(--brick);border:1px solid var(--hairline);border-radius:3px;padding:1px 7px}
+  .tag.navy{color:var(--deep)}
+  .tag.quiet{color:var(--muted);border-color:var(--rule)}
+  .card h3{font-size:15.5px;line-height:1.7}
+  .card p{font-size:13px;color:var(--muted)}
+  .meta{font-size:11.5px;color:var(--muted);display:flex;gap:6px;margin-top:auto;padding-top:6px}
+  .empty{border:1px dashed var(--hairline);border-radius:10px;background:#fff;padding:24px;text-align:center;margin-top:12px}
+  .empty h2{font-size:19px;color:var(--deep)}
+  .empty p{font-size:13px;color:var(--muted)}
+  .banner{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;border:2px solid var(--deep);border-radius:10px;background:#fff;padding:16px;margin:16px 0}
+  .banner h3{font-size:18px;color:var(--deep)}
+  .banner p{font-size:12.5px;color:var(--muted)}
+  footer{border-top:2px solid var(--deep);padding:14px 20px 20px;font-size:12px;color:var(--muted);text-align:center}
+  .phone{margin:20px auto;width:390px;max-width:100%;border:10px solid #22303f;border-radius:28px;overflow:hidden;background:var(--paper)}
+  .phone header .head{padding:10px 12px}
+  .phone .logo{font-size:19px}
+  .phone nav a{font-size:12px;padding:5px 6px}
+  .phone main{padding:0 12px 6px}
+  .phone h1{font-size:23px}
+  .phone .grid{grid-template-columns:1fr}
+  .ltr{direction:ltr;text-align:left}
+  .cols{display:grid;gap:16px;grid-template-columns:1fr}
+  @media(min-width:1000px){.cols{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="note"><b>معاينة تصميم Provisional</b> — ملف HTML قابل للتعديل يعكس رموز `src/styles.css` الفعلية. لا يُعد اعتمادًا نهائيًا. المطلوب وضعه في `docs/mvp/design-previews/` لكنه محفوظ في `scripts/mvp/design-previews/` بسبب صلاحيات البيئة.</div>
+
+<div class="frame">
+  <header><div class="head">
+    <div class="logo">Dial<b>Syria</b></div>
+    <nav><a class="active" href="#">الرئيسية</a><a href="#">سوريا</a><a href="#">عالمي</a><a href="#">اشترك</a></nav>
+    <button class="lang">English</button>
+  </div></header>
+  <main>
+    <section class="hero">
+      <div class="kicker">أخبار سوريا والعالم، مختارة من مصادر مباشرة</div>
+      <h1>صحيفة يومية هادئة، بلا ضجيج</h1>
+      <p class="sub">أخبار محلية وعالمية من تغذيات RSS لناشرين موثوقين، مصنّفة حسب القسم والموضوع، مع نشرة بريدية يومية في الوقت الذي تختاره.</p>
+      <a class="cta" href="#">اشترك في النشرة</a>
+    </section>
+    <div class="rule"></div>
+    <nav class="filters">
+      <div class="row"><span class="chip on">الكل</span><span class="chip">سوريا</span><span class="chip">عالمي</span></div>
+      <div class="row"><span class="chip sm">سياسة</span><span class="chip sm">اقتصاد</span><span class="chip sm">تكنولوجيا</span><span class="chip sm">رياضة</span><span class="chip sm">صحة وعلوم</span><span class="chip sm">ثقافة وفن</span></div>
+    </nav>
+    <section class="sec"><span>أخبار سوريا</span><a href="#">عرض الكل ←</a></section>
+    <div class="grid">
+      <article class="card"><div class="tags"><span class="tag">محلي</span><span class="tag quiet">سياسة</span></div><h3>عنوان خبر سوري تحريري بطول سطرين تقريبًا يوضح الحدث بدقة</h3><p>ملخص قصير من التغذية يشرح السياق في ثلاثة أسطر كحد أقصى.</p><div class="meta"><span>سانا</span><span>·</span><span>منذ ساعة</span></div></article>
+      <article class="card"><div class="tags"><span class="tag">محلي</span><span class="tag quiet">اقتصاد</span></div><h3>عناوين الأخبار المحلية تظهر هنا بنفس البنية والوزن</h3><p>لا نضيف أرقامًا أو ادعاءات غير مقاسة.</p><div class="meta"><span>تلفزيون سوريا</span><span>·</span><span>منذ 3 ساعات</span></div></article>
+      <article class="card"><div class="tags"><span class="tag">محلي</span><span class="tag quiet">صحة وعلوم</span></div><h3>بطاقة ثالثة لإكمال الشبكة على سطح المكتب</h3><p>الملخص يقتطع عند ثلاثة أسطر.</p><div class="meta"><span>وكالة نورث برس</span><span>·</span><span>أمس</span></div></article>
+    </div>
+    <div class="rule"></div>
+    <section class="sec"><span>أخبار عالمية</span><a href="#">عرض الكل ←</a></section>
+    <div class="grid">
+      <article class="card"><div class="tags"><span class="tag navy">عالمي</span><span class="tag quiet">سياسة</span></div><h3>خبر عالمي مع مصدره ولغته العربية كما وصلت من الناشر</h3><p>الرابط يفتح المقال الأصلي لدى الناشر.</p><div class="meta"><span>BBC عربي</span><span>·</span><span>منذ ساعتين</span></div></article>
+      <article class="card"><div class="tags"><span class="tag navy">عالمي</span><span class="tag quiet">تكنولوجيا</span></div><h3>تصنيف الخبر يحدده المحتوى ثم هوية التغذية عند الغياب</h3><p>مثال للتمييز بين المحلي والعالمي.</p><div class="meta"><span>الجزيرة نت</span><span>·</span><span>اليوم</span></div></article>
+    </div>
+    <div class="empty"><h2>لا توجد أخبار في هذا القسم بعد</h2><p>نجمع الأخبار مرة يوميًا. جرّب قسمًا آخر أو تحقق لاحقًا.</p></div>
+    <div class="banner"><div><h3>أنشئ اشتراكك</h3><p>بريدك، مواضيعك (حتى 3)، وساعة وصول النشرة بتوقيت دمشق.</p></div><a class="cta" href="#">اشترك</a></div>
+  </main>
+  <footer>DialSyria — خدمة نشرة أخبار مستقلة، تصل إلى بريدك في الوقت الذي تختاره.</footer>
+</div>
+
+<div class="phone">
+  <header><div class="head"><div class="logo">Dial<b>Syria</b></div><button class="lang">EN</button></div>
+  <div style="padding:0 12px 8px"><nav><a class="active" href="#">الرئيسية</a><a href="#">سوريا</a><a href="#">عالمي</a><a href="#">اشترك</a></nav></div></header>
+  <main>
+    <h1>صحيفة يومية هادئة</h1>
+    <div class="rule"></div>
+    <div class="row" style="margin:8px 0"><span class="chip sm">الكل</span><span class="chip sm on">سوريا</span><span class="chip sm">عالمي</span></div>
+    <div class="grid">
+      <article class="card"><div class="tags"><span class="tag">محلي</span><span class="tag quiet">سياسة</span></div><h3>بطاقة على الهاتف بعرض 390px مع مسافات مريحة</h3><p>ملخص قصير.</p><div class="meta"><span>سانا</span><span>·</span><span>منذ ساعة</span></div></article>
+      <article class="card"><div class="tags"><span class="tag">محلي</span><span class="tag quiet">رياضة</span></div><h3>ترتيب بصري واحد دون ازدحام</h3><p>ملخص قصير.</p><div class="meta"><span>تلفزيون سوريا</span><span>·</span><span>أمس</span></div></article>
+    </div>
+  </main>
+</div>
+
+<div class="note ltr"><b>LTR check (English):</b> the same layout renders left-to-right through <code>dir="ltr"</code> and logical spacing; navigation, chips and cards need no duplicated component.</div>
+
+<div class="note"><b>ملاحظات للمالك:</b> هذه معاينة ثابتة؛ الواجهة الفعلية في <code>src/pages/Home.tsx</code> مع <code>src/styles.css</code>، وتم بناؤها بنجاح (<code>npm run build</code>). يمكن تعديل الألوان/الخطوط/المسافات مباشرة في هذا الملف لاستعراض البدائل.</div>
+</body>
+</html>

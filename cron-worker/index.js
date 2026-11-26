@@ -18,10 +18,10 @@ export default {
     const base = (env.SITE_URL || "https://dial-syria.pages.dev").replace(/\/$/, "");
     const headers = { "x-cron-secret": env.CRON_SECRET || "" };
 
-    if (event.cron === "*/30 * * * *") {
-      // ingestion: gather + classify fresh news every 30 minutes
+    if (event.cron === "0 1 * * *") {
+      // Daily RSS ingestion at 01:00 UTC = 04:00 Damascus (UTC+3, no DST).
+      // The ingest route refuses a second clean run for the same Damascus day.
       ctx.waitUntil(ping(base + "/api/ingest", { method: "POST", headers }));
-      ctx.waitUntil(ping(base + "/api/direct", { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ mode: "sweep" }) }));
     } else if (event.cron === "7 * * * *") {
       // digests: at minute :07 of every hour, send to subscribers whose
       // chosen Damascus hour matches the current hour

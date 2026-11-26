@@ -109,10 +109,10 @@ test('unknown source is visible, edit is pending, and users only see their own i
  }finally{globalThis.fetch=old;sqlite.close();}
 });
 
-test('two scheduled cron ticks run the bounded sweep without duplicate work or bot sends',async()=>{
+test('scheduled cron ticks no longer trigger the interest sweep (isolated from the MVP schedule)',async()=>{
  const {sqlite,env}=await setup(),fake=network(),old=globalThis.fetch;const cron=(await import('../cron-worker/index.js')).default;let directCalls=0;
  globalThis.fetch=async(input,init)=>{const u=String(input);if(u==='https://local.invalid/api/direct'){directCalls++;return route.onRequestPost(context(new Request(u,init),env));}if(u==='https://local.invalid/api/ingest')return new Response('{}');return fake.fetch(input,init);};
- try{await callInterest(env,'a','POST',uni);for(let i=0;i<2;i++){const pending=[];await cron.scheduled({cron:'*/30 * * * *'},{SITE_URL:'https://local.invalid',CRON_SECRET:'local-only'},{waitUntil:p=>pending.push(p)});await Promise.all(pending);}assert.equal(directCalls,2);assert.equal(fake.posts,1);assert.equal(sqlite.prepare('SELECT count(*) n FROM direct_items').get().n,1);assert.equal(sqlite.prepare('SELECT count(*) n FROM interest_monitor_jobs').get().n,1);assert.ok(!fake.calls.some(x=>x.includes('api.telegram.org')));}
+ try{await callInterest(env,'a','POST',uni);for(const expression of ['0 1 * * *','7 * * * *','*/30 * * * *']){const pending=[];await cron.scheduled({cron:expression},{SITE_URL:'https://local.invalid',CRON_SECRET:'local-only'},{waitUntil:p=>pending.push(p)});await Promise.all(pending);}assert.equal(directCalls,0);assert.equal(sqlite.prepare('SELECT count(*) n FROM direct_items').get().n,0);assert.equal(sqlite.prepare('SELECT count(*) n FROM interest_monitor_jobs').get().n,0);assert.ok(!fake.calls.some(x=>x.includes('api.telegram.org')));}
  finally{globalThis.fetch=old;sqlite.close();}
 });
 

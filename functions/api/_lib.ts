@@ -19,6 +19,11 @@ export interface Env {
   BETA_DURATION_DAYS?: string;
   BETA_ALLOWED_TELEGRAM_IDS?: string;
   BETA_FRESHNESS_HOURS?: string;
+  /** Daily digest email provider (Resend preferred; Brevo kept as fallback). */
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  /** Test-only: reports success without contacting any provider. */
+  EMAIL_MOCK?: string;
   /** Isolated two-user staging pilot only; never enable on production. */
   STAGING_PILOT_MODE?: string;
   STAGING_D1_ID?: string;

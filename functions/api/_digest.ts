@@ -1,4 +1,5 @@
 import { Env, nowISO, uuid, damascusHour, damascusTodayStartISO, siteUrl, tgSendLong, isPrivateChatId, type Topic } from "./_lib";
+import { emailProvider, sendEmailMessage } from "./_email";
 
 const TOPIC_NAMES: Record<"ar" | "en", Record<Topic, string>> = {
   ar: {
@@ -131,8 +132,8 @@ export async function pickSections(
   const syria = await env.DB.prepare(
     `SELECT id, title, summary, url, source, topic, scope, published_at
      FROM articles
-     WHERE fetched_at > ? AND (scope = 'syria' OR title LIKE '%سوري%')
-     ORDER BY published_at DESC
+     WHERE COALESCE(published_at, fetched_at) > ? AND (scope = 'syria' OR title LIKE '%سوري%')
+     ORDER BY COALESCE(published_at, fetched_at) DESC
      LIMIT 8`
   )
     .bind(cutoff)
@@ -145,8 +146,8 @@ export async function pickSections(
     const rows = await env.DB.prepare(
       `SELECT id, title, summary, url, source, topic, scope, published_at
        FROM articles
-       WHERE topic = ? AND scope = 'global' AND fetched_at > ? AND title NOT LIKE '%سوري%'
-       ORDER BY published_at DESC
+       WHERE topic = ? AND scope = 'global' AND COALESCE(published_at, fetched_at) > ? AND title NOT LIKE '%سوري%'
+       ORDER BY COALESCE(published_at, fetched_at) DESC
        LIMIT 5`
     )
       .bind(t, cutoff)
@@ -181,23 +182,8 @@ export function digestText(lang: "ar" | "en", sections: DigestSection[]): string
 }
 
 export async function sendEmail(env: Env, to: string, subject: string, html: string): Promise<boolean> {
-  if (!env.BREVO_API_KEY || !env.SENDER_EMAIL) return false;
-  try {
-    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: { "api-key": env.BREVO_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({
-        sender: { email: env.SENDER_EMAIL, name: "DialSyria" },
-        to: [{ email: to }],
-        subject,
-        htmlContent: html,
-      }),
-      signal: AbortSignal.timeout(12000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  const outcome = await sendEmailMessage(env, { to, subject, html });
+  return outcome.ok;
 }
 
 export interface DigestResult {
@@ -240,7 +226,7 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
     skipped_no_articles: 0, failed_sends: 0, skipped_no_provider: 0, details: [],
   };
 
-  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
 
   for (const s of due.results) {
     const topics = (s.topics_csv || "").split(",").filter(Boolean) as Topic[];
@@ -268,7 +254,7 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
           result.failed_sends++;
         }
       }
-      } else if (env.BREVO_API_KEY && env.SENDER_EMAIL) {
+      } else if (emailProvider(env) !== "none") {
         const manageUrl = siteUrl(env) + "/manage?token=" + (await lookupToken(env, s.id));
         const html = digestHtml(lang, sections, manageUrl);
         const topicLabels = topics.map((x) => TOPIC_NAMES[lang][x]).join(" · ");
