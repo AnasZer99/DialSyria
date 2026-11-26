@@ -1,4 +1,4 @@
-import { Env, nowISO, uuid, damascusHour, damascusTodayStartISO, siteUrl, tgSendLong, type Topic } from "./_lib";
+import { Env, nowISO, uuid, damascusHour, damascusTodayStartISO, siteUrl, tgSendLong, isPrivateChatId, type Topic } from "./_lib";
 
 const TOPIC_NAMES: Record<"ar" | "en", Record<Topic, string>> = {
   ar: {
@@ -214,6 +214,7 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
   const now = nowISO();
   const hour = damascusHour();
   const todayStart = damascusTodayStartISO();
+  if(env.STAGING_PILOT_MODE==='1')return {hour,due:0,sent:0,skipped_no_articles:0,failed_sends:0,skipped_no_provider:0,details:[]};
 
   // lazily expire trials
   await env.DB.prepare("UPDATE subscribers SET status='expired' WHERE status='trial' AND trial_ends_at IS NOT NULL AND trial_ends_at < ?").bind(now).run();
@@ -226,6 +227,8 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
      WHERE ${hourFilter}
        ((s.status='trial' AND (s.trial_ends_at IS NULL OR s.trial_ends_at > ?))
          OR (s.status='active' AND (s.expires_at IS NULL OR s.expires_at > ?)))
+       AND NOT EXISTS (SELECT 1 FROM beta_identities b WHERE b.subscriber_id=s.id AND b.created_beta=1)
+       AND NOT (length(s.id)=69 AND substr(s.id,1,5)='beta_')
        AND (s.last_digest_at IS NULL OR s.last_digest_at < ?)
      LIMIT 200`
   )
@@ -252,7 +255,11 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
       status = "no_new_articles";
       result.skipped_no_articles++;
     } else if (s.telegram_chat_id && env.TELEGRAM_BOT_TOKEN) {
-      const ok = await tgSendLong(env, s.telegram_chat_id, digestText(lang, sections));
+      if (!isPrivateChatId(s.telegram_chat_id)) {
+        status = "telegram_invalid_recipient";
+        result.failed_sends++;
+      } else {
+        const ok = await tgSendLong(env, s.telegram_chat_id, digestText(lang, sections));
         if (ok) {
           status = "telegram_sent";
           result.sent++;
@@ -260,6 +267,7 @@ export async function runDigest(env: Env, broadcast = false): Promise<DigestResu
           status = "telegram_failed";
           result.failed_sends++;
         }
+      }
       } else if (env.BREVO_API_KEY && env.SENDER_EMAIL) {
         const manageUrl = siteUrl(env) + "/manage?token=" + (await lookupToken(env, s.id));
         const html = digestHtml(lang, sections, manageUrl);

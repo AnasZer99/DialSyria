@@ -1,0 +1,18 @@
+{
+  "method":"New post-freeze purposeful sample for the actual leased sweep, not random or representative. Some public entries were visible during earlier exploratory inspection, but these specific events did not tune this reliability fix. URLs are loaded only after monitoring finishes.",
+  "cases":[
+    {"interest":"أخبار وإعلانات جامعة إدلب","events":[
+      {"url":"https://t.me/IdlebUniversity/11741","publishedAt":"2026-11-19T14:19:08Z","expected":"relevant","description":"دورة تدريب على إدخال البيانات"},
+      {"url":"https://t.me/IdlebUniversity/11736","publishedAt":"2026-11-19T13:46:01Z","expected":"relevant","description":"بحث التعاون مع شركة تابعة للصندوق السيادي"}
+    ]},
+    {"interest":"آخر أخبار وإعلانات وزارة التعليم العالي","events":[
+      {"url":"https://t.me/SyMOHEASR/14034","publishedAt":"2026-11-25T18:17:02Z","expected":"relevant","description":"تعديل أحكام التحويل إلى جامعة الفرات"},
+      {"url":"https://t.me/SyMOHEASR/14033","publishedAt":"2026-11-25T18:06:58Z","expected":"relevant","description":"قرار متعلق بتسجيل المقبولين"},
+      {"url":"https://t.me/SyMOHEASR/13997","publishedAt":"2026-11-21T19:49:19Z","expected":"relevant","description":"تصريح حول انتقال الكليات إلى منظومة التعليم العالي"}
+    ]},
+    {"interest":"مشاريع الخدمات والبنية التحتية في إدلب","events":[
+      {"url":"https://sana.sy/locals/2638798/","publishedAt":"2026-11-18T16:39:19Z","expected":"irrelevant","description":"إطلاق حملة تشجير"},
+      {"url":"https://sana.sy/locals/2639508/","publishedAt":"2026-11-19T13:01:17Z","expected":"irrelevant","description":"عودة عائلات من مخيمات إدلب"}
+    ]}
+  ]
+}

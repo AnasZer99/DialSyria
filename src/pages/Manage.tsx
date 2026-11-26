@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Interest, type Subscriber } from "../lib/api";
+import { api, type Interest, type Subscriber, type LiveInterestReport } from "../lib/api";
 import { t, TOPICS, type Lang, type Topic } from "../lib/i18n";
 import type { PageProps } from "../App";
 
@@ -23,6 +23,9 @@ export default function Manage({ lang }: PageProps) {
   const [interestBusy, setInterestBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [discoveringId, setDiscoveringId] = useState<string | null>(null);
+  const [discovery, setDiscovery] = useState<LiveInterestReport | null>(null);
+  const [discoveryError, setDiscoveryError] = useState("");
 
   useEffect(() => {
     api.config().then((c) => setTgBot(c.telegram_bot)).catch(() => setTgBot(null));
@@ -208,6 +211,14 @@ export default function Manage({ lang }: PageProps) {
     }
   };
 
+  const testInterest = async (id: string) => {
+    if (!token || discoveringId) return;
+    setDiscovery(null); setDiscoveryError(""); setDiscoveringId(id);
+    try { setDiscovery(await api.discoverInterest(token, id)); }
+    catch (e) { setDiscoveryError(t(lang, e instanceof Error && e.message.includes("rate limit") ? "interestDiscoverRate" : "interestDiscoverError")); }
+    finally { setDiscoveringId(null); }
+  };
+
   if (state === "loading") return <div className="form note">{t(lang, "loading")}</div>;
 
   if (state === "anon" || state === "invalid") {
@@ -328,6 +339,7 @@ export default function Manage({ lang }: PageProps) {
             <li key={item.id} className="interest-item">
               <span className="interest-text">{item.text}</span>
               <div className="interest-actions">
+                <button className="abtn" onClick={() => void testInterest(item.id)} disabled={!!discoveringId || interestBusy}>{t(lang, "interestDiscover")}</button>
                 <button className="abtn" onClick={() => startEditInterest(item)} disabled={interestBusy}>{t(lang, "interestEdit")}</button>
                 <button className="abtn danger" onClick={() => void removeInterest(item.id)} disabled={interestBusy}>{t(lang, "interestDelete")}</button>
               </div>
@@ -337,6 +349,30 @@ export default function Manage({ lang }: PageProps) {
       </ul>
       {interests.length === 0 && <div className="note">{t(lang, "interestEmpty")}</div>}
       <div className="counter ltr">{interests.length}/10</div>
+
+      <div aria-live="polite" aria-busy={!!discoveringId}>
+        {discoveringId && <p className="note">{t(lang, "interestDiscovering")}</p>}
+        {discoveryError && <p className="err" role="alert">{discoveryError}</p>}
+        {discovery && <section className="interest-results">
+          <h3>{discovery.interest}</h3>
+          <p className="note">{t(lang, "interestDiscoverStats")}: {discovery.diagnostics.found} / {discovery.diagnostics.accepted} / {discovery.diagnostics.directlyVerified}</p>
+          {discovery.diagnostics.unverifiedAccepted > 0 && <p className="note">{t(lang, "interestDiscoverUnverified")}: {discovery.diagnostics.unverifiedAccepted}</p>}
+          {discovery.diagnostics.unprocessed > 0 && <p className="note">{t(lang, "interestUnprocessed")}: {discovery.diagnostics.unprocessed}</p>}
+          {(discovery.diagnostics.incomplete || discovery.diagnostics.errors.length > 0) && <p className="note">{t(lang, "interestDiscoverPartial")}</p>}
+          {(discovery.diagnostics.errors.length > 0 || discovery.diagnostics.warnings.length > 0 || discovery.diagnostics.sources.length > 0 || discovery.diagnostics.disabledSources.length > 0) && <details>
+            <summary>{t(lang, "interestDiscoverDetails")}</summary>
+            {discovery.diagnostics.sources.map(source=><p className="note" key={source.source}>{source.source} — {t(lang, "interestSourceStats")}: {source.accessible ? "✓" : "✗"} / {source.entriesRead} / {source.relevant} / {source.verified}{source.latestPublishedAt ? ` · ${source.latestPublishedAt}` : ""}{Object.entries(source.reasons).map(([reason,count])=>` · ${reason}: ${count}`).join("")}</p>)}
+            {discovery.diagnostics.disabledSources.map(source=><p className="note" key={source.source}>{t(lang,"interestSourceDisabled")}: {source.source} — {source.reason}</p>)}
+            <ul>{[...discovery.diagnostics.errors, ...discovery.diagnostics.warnings].map((message, index) => <li className="note" key={index}>{message}</li>)}</ul>
+          </details>}
+          {discovery.results.length === 0 ? <p className="note">{t(lang, "interestDiscoverEmpty")}</p> : <ul>
+            {discovery.results.map(item => <li key={item.url}>
+              <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+              <div className="note">{item.source} · {item.sourceRole === 'institutional_self_declared' ? t(lang,"interestInstitution") : item.sourceRole === 'news_agency' ? t(lang,"interestNewsAgency") : t(lang, "interestDiscoverVerified")} · {item.sourceType === "telegram" ? "Telegram · " : ""}{item.publishedAt ? new Date(item.publishedAt).toLocaleDateString(lang === "ar" ? "ar-SY" : "en-GB") : t(lang, "interestDiscoverDateMissing")}</div>
+            </li>)}
+          </ul>}
+        </section>}
+      </div>
 
       <div className="rule" style={{ marginTop: 24 }}></div>
       <button className="abtn danger" onClick={cancel} disabled={busy}>

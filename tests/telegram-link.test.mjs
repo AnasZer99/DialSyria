@@ -35,11 +35,11 @@ function captureTelegram() {
   return { messages, restore: () => { globalThis.fetch = original; } };
 }
 
-async function webhook(db, text, chatId = 111) {
+async function webhook(db, text, chatId = 111, chatType = 'private', fromId = chatId) {
   const req = new Request('https://example.test/api/telegram', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'whsec' },
-    body: JSON.stringify({ message: { text, chat: { id: chatId } } }),
+    body: JSON.stringify({ message: { text, chat: { id: chatId, type: chatType }, from: { id: fromId } } }),
   });
   const res = await telegram.onRequestPost({ request: req, env: { DB: db, TELEGRAM_BOT_TOKEN: 'test-token', TELEGRAM_WEBHOOK_SECRET: 'whsec' }, params: {}, waitUntil() {} });
   return { status: res.status, body: await res.json() };
@@ -118,4 +118,41 @@ test('existing Telegram links and management tokens are untouched', async () => 
     assert.equal(b.magic_token, 'token-b');
     assert.equal(sqlite.prepare('SELECT count(*) n FROM telegram_link_tokens WHERE subscriber_id=?').get('b').n, 0);
   } finally { sqlite.close(); }
+});
+
+test('non-private chats and mismatched senders cannot link an account', async () => {
+  const { db, sqlite } = await setup();
+  const capture = captureTelegram();
+  try {
+    const created = await createLink(db, 'token-a');
+    const token = created.body.token;
+    await webhook(db, '/start ' + token, -1001234567890, 'group', 9001);
+    await webhook(db, '/start ' + token, -1009876543210, 'supergroup', 9002);
+    await webhook(db, '/start ' + token, -1001111111111, 'channel', 9003);
+    await webhook(db, '/start ' + token, 111, 'private', 222); // sender mismatch
+    assert.equal(sqlite.prepare("SELECT telegram_chat_id FROM subscribers WHERE id='a'").get().telegram_chat_id, null);
+    // The link token was not consumed by any rejected attempt, so single use is preserved.
+    assert.equal(sqlite.prepare('SELECT used_at FROM telegram_link_tokens WHERE token=?').get(token).used_at, null);
+    // A valid private chat with a matching sender still links.
+    await webhook(db, '/start ' + token, 111, 'private', 111);
+    assert.equal(sqlite.prepare("SELECT telegram_chat_id FROM subscribers WHERE id='a'").get().telegram_chat_id, '111');
+  } finally { capture.restore(); sqlite.close(); }
+});
+
+test('/more does not reveal details in a group chat', async () => {
+  const { db, sqlite } = await setup();
+  const capture = captureTelegram();
+  try {
+    const created = await createLink(db, 'token-a');
+    await webhook(db, '/start ' + created.body.token, 111, 'private', 111);
+    sqlite.prepare("INSERT INTO notifications (id,subscriber_id,item_kind,item_id,interest_key,title,source,url,published_at,excerpt,status,prepared_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run('n1', 'a', 'discovery', 'item1', 'key', 'قرار تراخيص البناء في إدلب', 'سانا', 'https://news.example.org/a', '2026-11-20T09:00:00.000Z', 'تفاصيل', 'sent', '2026-11-21T00:00:00.000Z');
+    const before = capture.messages.length;
+    // A group chat request is ignored entirely: no details and no guidance leak.
+    await webhook(db, '/more n1', -1001234567890, 'group', 9001);
+    assert.equal(capture.messages.length, before);
+    // The private linked chat still receives the details.
+    await webhook(db, '/more n1', 111, 'private', 111);
+    assert.match(capture.messages.at(-1), /قرار تراخيص البناء في إدلب/);
+  } finally { capture.restore(); sqlite.close(); }
 });

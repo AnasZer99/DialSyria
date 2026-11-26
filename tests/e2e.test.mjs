@@ -99,7 +99,7 @@ test('complete user-to-notification workflow on an isolated database', async () 
     assert.ok(!JSON.stringify(link.body).includes(manageToken));
     const webhookHeaders = { 'x-telegram-bot-api-secret-token': 'whsec' };
     const webhookEnv = { TELEGRAM_BOT_TOKEN: 'bot-token', TELEGRAM_WEBHOOK_SECRET: 'whsec' };
-    await call(telegram.onRequestPost, db, jsonRequest('/api/telegram', { message: { text: '/start ' + link.body.token, chat: { id: 7001 } } }, webhookHeaders), webhookEnv);
+    await call(telegram.onRequestPost, db, jsonRequest('/api/telegram', { message: { text: '/start ' + link.body.token, chat: { id: 7001, type: 'private' }, from: { id: 7001 } } }, webhookHeaders), webhookEnv);
     assert.equal(sqlite.prepare('SELECT telegram_chat_id FROM subscribers WHERE id=?').get(sub.id).telegram_chat_id, '7001');
     assert.ok(!ext.telegramMessages.some((m) => m.text.includes(manageToken)));
 
@@ -126,8 +126,8 @@ test('complete user-to-notification workflow on an isolated database', async () 
     sqlite.prepare('INSERT INTO direct_sources (id,url,kind,name,discovered_at) VALUES (?,?,?,?,?)').run('e2e-src', 'https://direct.example.org', 'website', 'موقع مباشر', '2026-11-01T00:00:00.000Z');
     sqlite.prepare('INSERT INTO direct_source_interests (interest_key,source_id) VALUES (?,?)').run(key, 'e2e-src');
     const directItem = (id, url, title, content, publishedAt) =>
-      sqlite.prepare('INSERT INTO direct_items (id,source_id,url,title,content,published_at,first_seen) VALUES (?,?,?,?,?,?,?)')
-        .run(id, 'e2e-src', url, title, content, publishedAt, '2026-11-21T00:00:00.000Z');
+      sqlite.prepare('INSERT INTO direct_items (id,source_id,url,title,content,published_at,first_seen,verification_status) VALUES (?,?,?,?,?,?,?,?)')
+        .run(id, 'e2e-src', url, title, content, publishedAt, '2026-11-21T00:00:00.000Z', 'publisher_title_match');
     directItem('e2e-dir-rel', 'https://direct.example.org/idlib', 'قرار تنظيم البناء في إدلب', 'اجتماع لمناقشة تنظيم البناء في محافظة إدلب', '2026-11-20T08:00:00.000Z');
     directItem('e2e-dir-irr', 'https://direct.example.org/sport', 'مباراة كرة القدم في حلب', 'نتيجة المباراة', '2026-11-20T06:00:00.000Z');
 
@@ -165,7 +165,7 @@ test('complete user-to-notification workflow on an isolated database', async () 
     // 9. Notification details through the Telegram /more interaction.
     const target = sqlite.prepare("SELECT id FROM notifications WHERE subscriber_id=? AND url='https://news.example.org/e2e-idlib'").get(sub.id);
     assert.ok(target);
-    await call(telegram.onRequestPost, db, jsonRequest('/api/telegram', { message: { text: '/more ' + target.id, chat: { id: 7001 } } }, webhookHeaders), webhookEnv);
+    await call(telegram.onRequestPost, db, jsonRequest('/api/telegram', { message: { text: '/more ' + target.id, chat: { id: 7001, type: 'private' }, from: { id: 7001 } } }, webhookHeaders), webhookEnv);
     const details = ext.telegramMessages.at(-1);
     assert.ok(details);
     assert.match(details.text, /قرار جديد لتراخيص البناء في إدلب/);

@@ -30,6 +30,18 @@ export interface Interest {
   text: string;
   created_at: string;
   updated_at: string;
+  monitoring_status?: 'pending' | 'source_linked' | 'no_source' | 'temporary_failure';
+  error_code?: string | null;
+}
+
+export interface LiveInterestReport {
+  interestId: string;
+  mode: "live";
+  interest: string;
+  results: { title: string; source: string; url: string; publishedAt: string | null; interest: string; sourceType: "website" | "telegram"; sourceRole:string; verification: string }[];
+  diagnostics: { found: number; accepted: number; rejected: number; unprocessed: number; directlyVerified: number; unverifiedAccepted: number; duplicates: number; requests: number; requestLimit: number; errors: string[]; warnings: string[]; incomplete: boolean;
+    sources:{source:string;role:string;accessible:boolean;entriesRead:number;relevant:number;accepted:number;rejected:number;unprocessed:number;verified:number;latestPublishedAt:string|null;reasons:Record<string,number>}[];
+    disabledSources:{source:string;reason:string}[] };
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -64,6 +76,8 @@ export const api = {
     req<{ ok: boolean }>("/api/interests", { method: "PATCH", headers: { authorization: "Bearer " + token }, body: JSON.stringify({ id, text }) }),
   deleteInterest: (token: string, id: string) =>
     req<{ ok: boolean }>("/api/interests?id=" + encodeURIComponent(id), { method: "DELETE", headers: { authorization: "Bearer " + token } }),
+  discoverInterest: (token: string, id: string) =>
+    req<LiveInterestReport>("/api/interests/discover", { method: "POST", headers: { authorization: "Bearer " + token }, body: JSON.stringify({ id, mode: "live" }) }),
 };
 
 export const adminApi = {

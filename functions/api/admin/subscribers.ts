@@ -90,6 +90,8 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   }
 
   if (action === "pause") {
+    // A beta pause revokes its consent baseline even when initiated by an operator.
+    await env.DB.prepare("UPDATE beta_identities SET notifications_enabled_at=NULL WHERE subscriber_id=? AND created_beta=1").bind(id).run();
     await env.DB.prepare("UPDATE subscribers SET status='paused' WHERE id=?").bind(id).run();
     return json({ ok: true });
   }

@@ -10,10 +10,31 @@ export interface Env {
   TELEGRAM_BOT?: string;
   /** Server-side only: enables real Telegram delivery from the notify workflow. Never set by default. */
   TELEGRAM_DELIVERY_ENABLED?: string;
+  BETA_SCHEDULED_DELIVERY_ENABLED?: string;
+  DISCOVERY_EXPAND_LINKED_SOURCES?: string;
   /** Server-side only: comma-separated Telegram chat IDs permitted during controlled delivery tests. */
   TELEGRAM_TEST_CHAT_IDS?: string;
   /** Test/demo only: enables the deterministic mock discovery endpoint. Never set in production. */
   ALLOW_MOCK_DISCOVERY?: string;
+  BETA_DURATION_DAYS?: string;
+  BETA_ALLOWED_TELEGRAM_IDS?: string;
+  BETA_FRESHNESS_HOURS?: string;
+  /** Isolated two-user staging pilot only; never enable on production. */
+  STAGING_PILOT_MODE?: string;
+  STAGING_D1_ID?: string;
+}
+
+// Staging fails closed on malformed, duplicate or more than two identities.
+// An empty delivery allowlist is expected while real delivery is disabled.
+export function stagingAllowlistsValid(env: Env): boolean {
+  if (env.STAGING_PILOT_MODE !== '1') return true;
+  const parse=(value:string|undefined):string[]|null=>{
+    if(!value?.trim())return [];
+    const ids=value.split(',').map(x=>x.trim());
+    return ids.length<=2 && ids.every(x=>/^[1-9]\d*$/.test(x)) && new Set(ids).size===ids.length ? ids : null;
+  };
+  const invited=parse(env.BETA_ALLOWED_TELEGRAM_IDS),recipients=parse(env.TELEGRAM_TEST_CHAT_IDS);
+  return !!invited && invited.length>0 && !!recipients && recipients.every(id=>invited.includes(id));
 }
 
 export type PagesContext<C = Env> = { request: Request; env: C; params: Record<string, string>; waitUntil: (promise: Promise<unknown>) => void };
@@ -117,6 +138,12 @@ export async function rateLimit(env: Env, key: string, max: number): Promise<boo
 
 export function siteUrl(env: Env): string {
   return (env.SITE_URL || "https://dial-syria.pages.dev").replace(/\/$/, "");
+}
+
+// Historical Telegram group/channel IDs are negative. Positive IDs alone do not
+// establish chat type; inbound updates must still verify Telegram's metadata.
+export function isPrivateChatId(value: string): boolean {
+  return /^[1-9]\d*$/.test(value);
 }
 
 /** إرسال رسائل تيليجرام عبر البوت — مجاني وغير محدود */

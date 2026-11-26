@@ -1,6 +1,7 @@
 import { checkAdmin, checkCronSecret, fail, json, readJson, type Env, type Handler } from './_lib';
 import { discoverDirectSources, monitorDirectSources } from './_direct';
 import type { Database } from './_discovery';
+import { runInterestSweep } from './_interest_monitor';
 
 export const onRequestPost: Handler<Env & {BRAVE_SEARCH_API_KEY?:string}> = async ({request,env}) => {
   if (!env.DB) return fail('database not bound',500);
@@ -9,13 +10,7 @@ export const onRequestPost: Handler<Env & {BRAVE_SEARCH_API_KEY?:string}> = asyn
   const db=env.DB as unknown as Database;
   try {
     if(body.mode==='sweep') {
-      const cutoff=new Date(Date.now()-30*60*1000).toISOString();
-      const row=await db.prepare('SELECT i.interest_key FROM direct_source_interests i WHERE i.last_checked_at IS NULL OR i.last_checked_at<? ORDER BY i.last_checked_at LIMIT 1').bind(cutoff).first<{interest_key:string}>();
-      if(!row)return json({mode:'sweep',checked:0});
-      const monitor=await monitorDirectSources(db,row.interest_key);
-      const last=await db.prepare("SELECT started_at FROM direct_runs WHERE interest_key=? AND mode='discovery' ORDER BY started_at DESC LIMIT 1").bind(row.interest_key).first<{started_at:string}>();
-      const discovery=!last || Date.now()-Date.parse(last.started_at)>24*3600000 ? await discoverDirectSources(db,row.interest_key) : null;
-      return json({mode:'sweep',checked:1,monitor,discovery});
+      return json(await runInterestSweep(db,env));
     }
     if(typeof body.interest!=='string' || body.interest.trim().length<3 || body.interest.length>300)return fail('invalid interest');
     if(body.mode==='monitor')return json(await monitorDirectSources(db,body.interest));

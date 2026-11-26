@@ -16,8 +16,8 @@ export default function Home({ lang, nav }: PageProps) {
         <div className="kicker">{t(lang, "tagline")}</div>
         <h1 className="hero-title">{t(lang, "heroTitle")}</h1>
         <p className="hero-sub">{t(lang, "heroSub")}</p>
-        <button className="cta" onClick={() => nav("/subscribe")}>
-          {t(lang, "cta")} — <span className="ltr">{t(lang, "price")}</span>
+        <button className="cta" onClick={() => nav("/beta")}>
+          {lang === 'ar' ? 'ابدأ تجربتك' : 'Start your beta'}
         </button>
         <a
           className="sublink"
@@ -100,15 +100,8 @@ export default function Home({ lang, nav }: PageProps) {
       </div>
 
       <div className="pricing">
-        <div className="p ltr">{lang === "ar" ? "10$" : "$10"}</div>
-        <div className="q">{t(lang, "price")}</div>
-        <ul>
-          <li>{t(lang, "topicsSub")}</li>
-          <li>{t(lang, "trialNote")}</li>
-        </ul>
-        <button className="cta" onClick={() => nav("/subscribe")}>
-          {t(lang, "cta")}
-        </button>
+        <p>{lang === 'ar' ? 'تجربة مغلقة لعدد محدود؛ تغطية المصادر المحلية محدودة وقيد الاختبار.' : 'A limited closed beta; local source coverage is still being tested.'}</p>
+        <button className="cta" onClick={() => nav("/beta")}>{lang === 'ar' ? 'ابدأ تجربتك' : 'Start your beta'}</button>
       </div>
     </div>
   );

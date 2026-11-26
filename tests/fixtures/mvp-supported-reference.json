@@ -1,0 +1,22 @@
+{
+  "frozenAt": "2026-11-26T07:15:00Z",
+  "method": "Independently selected from public publisher listings before running the source monitor. URLs are comparison data only and are never passed to the engine.",
+  "cases": [
+    {"interest":"أخبار وإعلانات جامعة إدلب", "events":[
+      {"url":"https://t.me/IdlebUniversity/11778","publishedAt":"2026-11-24T14:20:21Z","description":"لقاء عمادة التربية مع طلاب السنة الأولى"},
+      {"url":"https://t.me/IdlebUniversity/11783","publishedAt":"2026-11-24T15:17:01Z","description":"مناقصة أدوات ومعدات مخبرية لكلية العلوم"},
+      {"url":"https://t.me/IdlebUniversity/11785","publishedAt":"2026-11-24T20:05:30Z","description":"مشاركة الجامعة في مؤتمر التعليم العالي في عمّان"}
+    ]},
+    {"interest":"آخر أخبار وإعلانات وزارة التعليم العالي", "events":[
+      {"url":"https://t.me/SyMOHEASR/14021","publishedAt":"2026-11-23T13:54:28Z","description":"توضيح وضع الدارسين في مراكز الجامعات السودانية"},
+      {"url":"https://t.me/SyMOHEASR/14023","publishedAt":"2026-11-24T13:35:37Z","description":"تحديد موعد الامتحان الطبي الموحد"},
+      {"url":"https://t.me/SyMOHEASR/14024","publishedAt":"2026-11-24T16:19:38Z","description":"تمديد تسجيل الطلاب المقبولين في الجامعات الخاصة"},
+      {"url":"https://t.me/SyMOHEASR/14032","publishedAt":"2026-11-25T11:45:26Z","description":"بدء تسجيل مفاضلة الجامعة الافتراضية"}
+    ]},
+    {"interest":"مشاريع الخدمات والبنية التحتية في إدلب", "events":[
+      {"url":"https://sana.sy/health/2644173/","publishedAt":"2026-11-24","description":"بدء إعادة تأهيل مشفى معرة النعمان"},
+      {"url":"https://sana.sy/governorates/edlib/2644159/","publishedAt":"2026-11-24","description":"حجر أساس مشفى سنجار"},
+      {"url":"https://sana.sy/governorates/edlib/2643848/","publishedAt":"2026-11-24","description":"افتتاح محطة الناجية للمياه"}
+    ]}
+  ]
+}

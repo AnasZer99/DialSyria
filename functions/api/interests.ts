@@ -1,4 +1,5 @@
 import { type Handler, fail, json, nowISO, readJson, uuid } from './_lib';
+import { sessionOwner } from './_beta';
 
 const LIMIT = 10;
 type Interest = { id: string; text: string; created_at: string; updated_at: string };
@@ -7,7 +8,7 @@ type Interest = { id: string; text: string; created_at: string; updated_at: stri
 export async function owner(request: Request, env: Parameters<Handler>[0]['env'], headerOnly = false): Promise<string | null> {
   const authorization = request.headers.get('authorization') || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : headerOnly ? '' : new URL(request.url).searchParams.get('token') || '';
-  if (!token) return null;
+  if (!token) return sessionOwner(request,env);
   const row = await env.DB.prepare('SELECT id, magic_expires FROM subscribers WHERE magic_token=?').bind(token).first<{id:string; magic_expires:string | null}>();
   if (!row || (row.magic_expires && row.magic_expires < nowISO())) return null;
   return row.id;
@@ -32,7 +33,7 @@ function validated(value: unknown): {text:string; normalized:string} | null {
 export const onRequestGet: Handler = async ({request, env}) => {
   if (!env.DB) return fail('database not bound', 500);
   const id = await owner(request, env); if (!id) return fail('invalid or expired token', 401);
-  const rows = await env.DB.prepare('SELECT id, text, created_at, updated_at FROM subscriber_interests WHERE subscriber_id=? ORDER BY created_at, id').bind(id).all<Interest>();
+  const rows = await env.DB.prepare("SELECT i.id, i.text, i.created_at, i.updated_at, COALESCE(j.status,'pending') AS monitoring_status, j.last_attempt_at, j.next_attempt_at, COALESCE(j.source_count,0) AS source_count, j.error_code FROM subscriber_interests i LEFT JOIN interest_monitor_jobs j ON j.interest_key=i.normalized_text WHERE i.subscriber_id=? ORDER BY i.created_at, i.id").bind(id).all<Interest>();
   return json({interests: rows.results});
 };
 
@@ -42,8 +43,9 @@ export const onRequestPost: Handler = async ({request, env}) => {
   const body = await readJson<{text?:unknown} | null>(request); const value = validated(body?.text);
   if (!value) return fail('interest must contain 3 to 300 characters of text');
   const itemId = uuid(), now = nowISO();
+  const limit = request.headers.get('authorization') || new URL(request.url).searchParams.has('token') ? LIMIT : 3;
   const result = await env.DB.prepare('INSERT INTO subscriber_interests (id,subscriber_id,text,normalized_text,created_at,updated_at) SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM subscriber_interests WHERE subscriber_id=?) < ? ON CONFLICT(subscriber_id,normalized_text) DO NOTHING')
-    .bind(itemId,id,value.text,value.normalized,now,now,id,LIMIT).run();
+    .bind(itemId,id,value.text,value.normalized,now,now,id,limit).run();
   if (!result.meta.changes) {
     const duplicate = await env.DB.prepare('SELECT id FROM subscriber_interests WHERE subscriber_id=? AND normalized_text=?').bind(id,value.normalized).first<{id:string}>();
     return fail(duplicate ? 'interest already exists' : 'interest limit reached', 409);

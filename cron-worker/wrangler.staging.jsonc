@@ -1,0 +1,10 @@
+{
+  "name": "dialsyria-staging-interest-cron",
+  "account_id": "3536c8fe2de7b854a7295fb495763935",
+  "main": "staging.js",
+  "workers_dev": false,
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "triggers": { "crons": [] },
+  "vars": { "STAGING_SCHEDULER_ENABLED": "0", "STAGING_BETA_PREPARATION_ENABLED": "0", "STAGING_BATCH_SWEEP_ENABLED": "0" }
+}

@@ -35,6 +35,9 @@ test('RSS parser, storage, source monitoring and repeated runs', async () => {
     assert.equal(sqlite.prepare('SELECT count(*) n FROM discovery_sources').get().n,1);
     assert.ok(second.queries.some(x=>x.includes('site:example.org')));
     assert.equal(sqlite.prepare('SELECT count(*) n FROM discovery_runs').get().n,2);
+    const runs=sqlite.prepare('SELECT interest,report FROM discovery_runs').all();
+    assert.ok(runs.every(x=>x.interest==='[redacted]' && !x.report.includes(interest)));
+    assert.equal(first.interest,interest);
   } finally { sqlite.close(); }
 });
 

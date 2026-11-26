@@ -4,6 +4,7 @@ import Home from "./pages/Home";
 import Subscribe from "./pages/Subscribe";
 import Manage from "./pages/Manage";
 import Admin from "./pages/Admin";
+import Beta from "./pages/Beta";
 
 export interface PageProps {
   lang: Lang;
@@ -37,7 +38,8 @@ export default function App() {
 
   let page: ReactNode;
   if (path === "/subscribe") page = <Subscribe {...props} />;
-  else if (path === "/manage") page = <Manage {...props} />;
+  else if (path === "/beta") page = <Beta {...props} />;
+  else if (path === "/manage") page = new URLSearchParams(window.location.search).has('token') ? <Manage {...props} /> : <Beta {...props} />;
   else if (path === "/admin") page = <Admin {...props} />;
   else page = <Home {...props} />;
 

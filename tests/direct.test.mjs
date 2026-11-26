@@ -29,7 +29,7 @@ test('discovers a Telegram channel from mocked web search and reads public post'
    const u=String(url);
    if(u.includes('api.search.brave.com'))return Response.json({web:{results:[{title,url:'https://t.me/examplechan/123',description:title}]}});
    if(u==='https://t.me/robots.txt')return new Response('User-agent: *\nAllow: /');
-   if(u==='https://t.me/s/examplechan')return new Response(`<div class="tgme_widget_message_wrap"><div data-post="examplechan/123"><div class="tgme_widget_message_text">${title}</div><time datetime="${new Date().toISOString()}"></time></div></div>`);
+   if(u==='https://t.me/s/examplechan' || u==='https://t.me/s/examplechan/123')return new Response(`<div class="tgme_widget_message_wrap"><div data-post="examplechan/123"><div class="tgme_widget_message_text">${title}</div><time datetime="2026-11-24T12:00:00.000Z"></time></div></div>`);
    throw Error('unexpected '+u);
  };
  try{const d=await direct.discoverDirectSources(db,interest,{key:'mock',fetcher});assert.equal(d.discovered[0].kind,'telegram');const r=await direct.monitorDirectSources(db,interest,{fetcher});assert.equal(r.items[0].url,'https://t.me/examplechan/123');assert.ok(r.items[0].publishedAt);}finally{sqlite.close();}

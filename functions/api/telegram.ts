@@ -1,9 +1,11 @@
-import { Env, Handler, json, siteUrl, tgSend, tgSendLong, uuid, nowISO, type Topic } from "./_lib";
+import { Env, Handler, json, siteUrl, stagingAllowlistsValid, tgSend, tgSendLong, uuid, nowISO, type Topic } from "./_lib";
 import { pickSections, digestText } from "./_digest";
-import { notificationDetails } from "./_notify";
+import { notificationDetails, subscriberEligible } from "./_notify";
+import { approveBeta, approveStagingChallenge, claimBetaStart, sendBetaConfirmation, sendStagingChallenges } from "./_beta";
 
 interface TgUpdate {
-  message?: { text?: string; chat?: { id: number } };
+  message?: { text?: string; chat?: { id: number; type?: string }; from?: { id?: number } };
+  callback_query?: { id?:string; data?:string; from?:{id?:number}; message?:{chat?:{id:number;type?:string}} };
 }
 
 /** Webhook من تيليجرام: /start <magic_token> يربط حساب المشترك بالبوت */
@@ -18,14 +20,33 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   } catch {
     return json({ ok: true });
   }
+  if(env.STAGING_PILOT_MODE==='1'){
+    if(!stagingAllowlistsValid(env))return json({ok:true});
+    const actor=update.callback_query?.from?.id ?? update.message?.from?.id;
+    const invited=new Set((env.BETA_ALLOWED_TELEGRAM_IDS || '').split(',').map(x=>x.trim()));
+    if(!actor || !invited.has(String(actor)))return json({ok:true});
+  }
+  const callback=update.callback_query;
+  if(callback){
+    const chat=callback.message?.chat, data=callback.data || '';
+    if(!chat || chat.type!=='private' || !callback.from || callback.from.id!==chat.id)return json({ok:true});
+    const approved=env.STAGING_PILOT_MODE==='1' && data.startsWith('p_') ? await approveStagingChallenge(env,data.slice(2),String(chat.id)) : env.STAGING_PILOT_MODE!=='1' && data.startsWith('b_') ? await approveBeta(env,data.slice(2),String(chat.id)) : false;
+    return callback.id ? json({method:'answerCallbackQuery',callback_query_id:callback.id,text:approved?'تم التأكيد. عُد إلى المتصفح.':'انتهت صلاحية الطلب أو استُخدم مسبقاً.'}) : json({ok:true});
+  }
   const msg = update.message;
   if (!msg?.chat?.id) return json({ ok: true });
   const chatId = String(msg.chat.id);
   const text = (msg.text || "").trim();
+  // Only private chats may link an account or read personal notification details;
+  // groups, supergroups and channels are rejected, and the sender must match the chat.
+  if (msg.chat.type !== "private" || !msg.from || msg.from.id !== msg.chat.id) {
+    return json({ ok: true });
+  }
   if (!text.startsWith("/start")) {
     // /more <notification-id>: details of a notification owned by the linked subscriber.
     // Details come only from stored fields; nothing is fetched or invented.
     if (text.startsWith("/more")) {
+      if(env.STAGING_PILOT_MODE==='1' && env.TELEGRAM_DELIVERY_ENABLED!=='1')return json({ok:true});
       const notificationId = text.split(/\s+/)[1] || "";
       const linked = await env.DB.prepare("SELECT id FROM subscribers WHERE telegram_chat_id = ?").bind(chatId).first<{ id: string }>();
       if (!linked) {
@@ -44,6 +65,7 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     // أمر النشرة الفورية: مرة واحدة كل 24 ساعة، ويُحتسب نسخة اليوم
     // (يُسجَّل الاستلام فيتجاوز الموعد المجدول حتى اليوم التالي)
     if (text.startsWith("/news") || text === "أخبار" || text === "الأخبار" || text === "الاخبار") {
+      if(env.STAGING_PILOT_MODE==='1')return json({ok:true});
       const row = await env.DB.prepare(
         "SELECT id, language, status, last_digest_at FROM subscribers WHERE telegram_chat_id = ?"
       ).bind(chatId).first<{ id: string; language: string; status: string; last_digest_at: string | null }>();
@@ -55,7 +77,12 @@ export const onRequestPost: Handler = async ({ request, env }) => {
         );
         return json({ ok: true });
       }
-      if (row.status !== "active" && row.status !== "trial") {
+      const beta = await env.DB.prepare('SELECT created_beta FROM beta_identities WHERE subscriber_id=?').bind(row.id).first<{created_beta:number}>();
+      if (beta?.created_beta === 1 || /^beta_[a-f0-9]{64}$/.test(row.id)) {
+        await tgSend(env, chatId, row.language === 'en' ? 'Your updates follow your saved interests.' : 'تحديثاتك تتبع اهتماماتك المحفوظة في الموقع.');
+        return json({ ok: true });
+      }
+      if (!(await subscriberEligible(env.DB, row.id))) {
         const arMsg =
           row.status === "pending"
             ? "اشتراكك بانتظار التفعيل من إدارة الخدمة — لن تصلك النشرة حتى تُفعَّل."
@@ -109,6 +136,16 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   }
 
   const token = text.split(/\s+/)[1] || "";
+  if(env.STAGING_PILOT_MODE==='1'){
+    await sendStagingChallenges(env,chatId);
+    return json({ok:true});
+  }
+  if(token.startsWith('b_')){
+    const challenge=await claimBetaStart(env,token.slice(2),chatId);
+    if(challenge) await sendBetaConfirmation(env,chatId,token.slice(2),challenge.code);
+    else await tgSend(env,chatId,'انتهت صلاحية طلب الدخول أو استُخدم. ابدأ طلباً جديداً من الموقع.');
+    return json({ok:true});
+  }
   if (!token) {
     await tgSend(
       env,
@@ -135,7 +172,14 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     await tgSend(env, chatId, "هذا الحساب مرتبط بمشترك آخر. استخدم حسابك الصحيح أو تواصل مع الإدارة.");
     return json({ ok: true });
   }
-  await env.DB.prepare("UPDATE subscribers SET telegram_chat_id=? WHERE id=?").bind(chatId, link.subscriber_id).run();
+  // Enforce ownership inside the write itself so simultaneous links cannot pass
+  // separate preflight checks and attach one private chat to two accounts.
+  const linked = await env.DB.prepare("UPDATE subscribers SET telegram_chat_id=? WHERE id=? AND NOT EXISTS (SELECT 1 FROM subscribers other WHERE other.telegram_chat_id=? AND other.id<>?) AND NOT EXISTS (SELECT 1 FROM beta_identities b WHERE b.subscriber_id=? AND b.chat_id<>?)")
+    .bind(chatId,link.subscriber_id,chatId,link.subscriber_id,link.subscriber_id,chatId).run();
+  if (!linked.meta.changes) {
+    await tgSend(env, chatId, "هذا الحساب مرتبط بمشترك آخر أو لا يمكن تغيير الربط. تواصل مع الإدارة.");
+    return json({ ok: true });
+  }
   await tgSend(
     env,
     chatId,

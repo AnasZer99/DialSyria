@@ -152,7 +152,9 @@ footer .fbrand { font-family: "Amiri", serif; font-weight: 700; font-size: 15px;
 .interest-item { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px; border: 1px solid var(--hairline); border-radius: 6px; background: #fff; padding: 8px 10px; }
 .interest-item .field { height: 38px; font-size: 14px; flex: 1 1 180px; }
 .interest-text { font-size: 14px; color: var(--ink); line-height: 1.6; word-break: break-word; flex: 1 1 180px; }
-.interest-actions { display: flex; gap: 6px; flex: none; }
+.interest-actions { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; }
+.interest-results { margin-top: 16px; overflow-wrap: anywhere; }
+.interest-results ul { padding-inline-start: 20px; display: grid; gap: 12px; }
 @media (max-width: 640px) {
   .trow { grid-template-columns: 1fr; }
   .trow .actions .abtn { padding: 8px 12px; }

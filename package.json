@@ -5,8 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "demo": "node --use-system-ca scripts/demo.mjs",
+    "beta:local": "node scripts/local-interest-browser.mjs",
+    "beta:onboarding": "node scripts/local-beta-onboarding.mjs",
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/*.test.mjs",
+    "test:beta-delivery": "node --test tests/beta-delivery.test.mjs",
+    "staging:check": "node scripts/staging-preflight.mjs",
+    "staging:prepare": "node scripts/staging-prepare.mjs",
+    "staging:checkpoint": "node scripts/staging-checkpoint.mjs",
     "typecheck:backend": "wrangler types worker-configuration.d.ts --env-interface DialSyriaCloudflareEnv && tsc -p tsconfig.backend.json",
     "deploy": "npm run build && wrangler pages deploy dist --project-name Dial-Syria",
     "db:schema": "wrangler d1 execute dialsyria-db --remote --file=schema.sql"

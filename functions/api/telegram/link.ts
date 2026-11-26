@@ -7,6 +7,9 @@ const LINK_TTL_MS = 15 * 60 * 1000;
 
 export const onRequestPost: Handler = async ({ request, env }) => {
   if (!env.DB) return fail('database not bound', 500);
+  // Beta identities are already linked; only legacy bearer sessions may request
+  // a link token, so a beta cookie cannot silently relink an account.
+  if (!(request.headers.get('authorization') || '').startsWith('Bearer ')) return fail('invalid or expired token', 401);
   const subscriberId = await owner(request, env, true);
   if (!subscriberId) return fail('invalid or expired token', 401);
   const now = nowISO();

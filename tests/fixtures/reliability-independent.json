@@ -1,0 +1,21 @@
+{
+  "selectedAt": "2026-11-26T08:51:52Z",
+  "method": "Public-source events selected after code and test freeze; none of these specific URLs were used to tune this batch. Purposive small sample, not random or representative. Reference URLs are loaded after the engine calls.",
+  "cases": [
+    {"interest":"أخبار وإعلانات جامعة إدلب","events":[
+      {"url":"https://t.me/IdlebUniversity/11754","publishedAt":"2026-11-23T14:47:45Z","expected":"relevant","description":"اختبار المقدرة اللغوية للقيد في الماجستير"},
+      {"url":"https://t.me/IdlebUniversity/11751","publishedAt":"2026-11-22T16:34:31Z","expected":"relevant","description":"قبول بحث للجامعة في مؤتمر التعليم العالي"},
+      {"url":"https://t.me/IdlebUniversity/11735","publishedAt":"2026-11-19T12:44:05Z","expected":"relevant","description":"جولة رئيس الجامعة في امتحان الصيدلة الموحد"}
+    ]},
+    {"interest":"آخر أخبار وإعلانات وزارة التعليم العالي","events":[
+      {"url":"https://t.me/SyMOHEASR/14028","publishedAt":"2026-11-24T17:04:13Z","expected":"relevant","description":"افتتاح مؤتمر دعم التعليم العالي"},
+      {"url":"https://t.me/SyMOHEASR/14029","publishedAt":"2026-11-24T18:18:30Z","expected":"relevant","description":"مشاركة الوزير في جلسة المؤتمر الحوارية"},
+      {"url":"https://t.me/SyMOHEASR/14007","publishedAt":"2026-11-22T16:43:40Z","expected":"relevant","description":"بحث التعاون الأكاديمي مع وفد دنماركي"}
+    ]},
+    {"interest":"مشاريع الخدمات والبنية التحتية في إدلب","events":[
+      {"url":"https://sana.sy/governorates/2627878/","publishedAt":"2026-11-06T15:47:51Z","expected":"relevant","description":"تأهيل البنى التحتية في ريف إدلب الجنوبي"},
+      {"url":"https://sana.sy/security/2644013/","publishedAt":"2026-11-24T18:08:00Z","expected":"irrelevant","description":"تفكيك عصابتين للخطف والابتزاز"},
+      {"url":"https://sana.sy/locals/2643385/","publishedAt":"2026-11-23T19:39:13Z","expected":"irrelevant","description":"وفد يعزي أسر أطفال ضحايا لغم"}
+    ]}
+  ]
+}

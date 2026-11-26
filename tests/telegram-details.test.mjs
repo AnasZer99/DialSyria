@@ -28,7 +28,7 @@ async function webhook(db, text, chatId) {
   const req = new Request('https://example.test/api/telegram', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': 'whsec' },
-    body: JSON.stringify({ message: { text, chat: { id: chatId } } }),
+    body: JSON.stringify({ message: { text, chat: { id: chatId, type: 'private' }, from: { id: chatId } } }),
   });
   await telegram.onRequestPost({ request: req, env: { DB: db, TELEGRAM_BOT_TOKEN: 'test-token', TELEGRAM_WEBHOOK_SECRET: 'whsec' }, params: {}, waitUntil() {} });
 }

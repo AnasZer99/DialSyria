@@ -1,4 +1,5 @@
-export interface Provenance { googleNewsUrl: string | null; originalUrl: string | null; resolutionStatus: string; publisherTitle: string | null; publisherPublishedAt: string | null; publisherText: string | null; verificationStatus: string }
+import { isLiveBudgetError } from './_live_budget';
+export interface Provenance { googleNewsUrl: string | null; originalUrl: string | null; resolutionStatus: string; publisherTitle: string | null; publisherPublishedAt: string | null; publisherText: string | null; verificationStatus: string; retryAfterSeconds?: number }
 type Fetcher = typeof fetch;
 export function safeUrl(value: string): URL | null {
   try {
@@ -31,6 +32,10 @@ export function allowedByRobots(robots: string, pathname: string): boolean {
 }
 function attrs(tag: string): Record<string,string> { const out: Record<string,string> = {}; for (const m of tag.matchAll(/([\w:-]+)\s*=\s*["']([^"']*)["']/g)) out[m[1].toLowerCase()] = m[2]; return out; }
 function decode(s: string): string { return s.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>'); }
+function retryAfter(response:Response):number {
+  const raw=response.headers.get('retry-after'), seconds=raw && /^\d+$/.test(raw) ? Number(raw) : NaN, date=raw ? Date.parse(raw) : NaN;
+  return Math.max(300,Number.isFinite(seconds) ? seconds : Number.isFinite(date) ? Math.ceil((date-Date.now())/1000) : 300);
+}
 export async function inspectPublisher(url: string, sourceUrl: string | undefined, fetcher: Fetcher = fetch): Promise<Provenance> {
   const initial = safeUrl(url);
   const out: Provenance = { googleNewsUrl: initial?.hostname === 'news.google.com' ? url : null, originalUrl: null, resolutionStatus: 'invalid_url', publisherTitle: null, publisherPublishedAt: null, publisherText:null, verificationStatus: 'not_attempted' };
@@ -44,6 +49,7 @@ export async function inspectPublisher(url: string, sourceUrl: string | undefine
       let current = initial;
       for (let i=0; i<3; i++) {
         const response = await fetcher(current.toString(), {redirect:'manual', signal:AbortSignal.timeout(8000)});
+        if(response.status===429){out.resolutionStatus='google_http_429';out.retryAfterSeconds=retryAfter(response);return out;}
         const location = response.headers.get('location');
         if (response.status < 300 || response.status >= 400 || !location) return out;
         const next = safeUrl(new URL(location,current).toString());
@@ -53,15 +59,17 @@ export async function inspectPublisher(url: string, sourceUrl: string | undefine
         candidate = next; break;
       }
       if (candidate.hostname === 'news.google.com') { out.resolutionStatus='redirect_limit'; return out; }
-    } catch { out.resolutionStatus='google_request_failed'; return out; }
+    } catch(e) { if(isLiveBudgetError(e))throw e; out.resolutionStatus='google_request_failed'; return out; }
   }
   if (!candidate) return out;
   out.originalUrl = candidate.toString();
   out.resolutionStatus = out.googleNewsUrl ? 'http_redirect' : 'direct_provider_url';
   try {
     const robots = await fetcher(`${candidate.origin}/robots.txt`, {redirect:'manual', signal:AbortSignal.timeout(8000), headers:{'User-Agent':'DialSyria-Discovery/1.0'}});
+    if (robots.status === 429) { out.verificationStatus='robots_http_429'; out.retryAfterSeconds=retryAfter(robots); return out; }
     if (robots.status !== 404 && (!robots.ok || !allowedByRobots((await robots.text()).slice(0,100000),candidate.pathname))) { out.verificationStatus='robots_denied_or_unavailable'; return out; }
     const page = await fetcher(candidate.toString(), {redirect:'manual', signal:AbortSignal.timeout(8000), headers:{accept:'text/html','User-Agent':'DialSyria-Discovery/1.0'}});
+    if (page.status === 429) { out.verificationStatus='publisher_http_429'; out.retryAfterSeconds=retryAfter(page); return out; }
     if (!page.ok || !page.headers.get('content-type')?.toLowerCase().includes('text/html')) { out.verificationStatus=`publisher_http_${page.status}`; return out; }
     const html = (await page.text()).slice(0,200000);
     let title: string | null = null; let published: string | null = null; let description:string | null = null;
@@ -90,6 +98,6 @@ export async function inspectPublisher(url: string, sourceUrl: string | undefine
     const article=html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1];
     const excerpt=article?.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     out.publisherTitle = title; out.publisherPublishedAt = published; out.publisherText = excerpt ? decode(excerpt).slice(0,5000) : description?.slice(0,5000) || null; out.verificationStatus = title || published ? 'publisher_metadata' : 'metadata_unavailable';
-  } catch { out.verificationStatus = 'publisher_request_failed'; }
+  } catch(e) { if(isLiveBudgetError(e))throw e; out.verificationStatus = 'publisher_request_failed'; }
   return out;
 }

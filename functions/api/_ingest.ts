@@ -137,10 +137,10 @@ function pick(block: string, tag: string): string {
   return v.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-export function parseFeed(xml: string): RssItem[] {
+export function parseFeed(xml: string, maxItems = 12): RssItem[] {
   const items: RssItem[] = [];
   const blocks = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-  for (const b of blocks.slice(0, 12)) {
+  for (const b of blocks.slice(0, Math.min(40, Math.max(0, maxItems)))) {
     const title = pick(b, "title");
     const link = pick(b, "link");
     if (!title || !link || !/^https?:\/\//.test(link)) continue;

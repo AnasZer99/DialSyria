@@ -1,8 +1,15 @@
 import {parseFeed} from './_ingest';
 import {allowedByRobots, inspectPublisher, safeUrl, type Provenance} from './_publisher';
+import {isLiveBudgetError} from './_live_budget';
 
 function normalizeTitle(s: string): string {
   return s.toLowerCase().replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+}
+function checkThrottle(response: Response): void {
+  if (response.status !== 429) return;
+  const raw=response.headers.get('retry-after');
+  const seconds=raw && /^\d+$/.test(raw) ? Number(raw) : raw ? Math.ceil((Date.parse(raw)-Date.now())/1000) : 0;
+  throw new Error(`publisher HTTP 429; retry later (Retry-After ${Math.max(300,Number.isFinite(seconds) ? seconds : 0)}s)`);
 }
 export async function lookupPublisherFeed(title: string, source: string, sourceUrl: string | undefined, googleNewsUrl: string, feedDate: string | null, fetcher: typeof fetch = fetch): Promise<Provenance | null> {
   const base = sourceUrl ? safeUrl(sourceUrl) : null;
@@ -10,8 +17,10 @@ export async function lookupPublisherFeed(title: string, source: string, sourceU
   const headers = {'User-Agent':'DialSyria-Discovery/1.0'};
   try {
     const robots=await fetcher(`${base.origin}/robots.txt`,{headers,redirect:'manual',signal:AbortSignal.timeout(6000)});
+    checkThrottle(robots);
     if(robots.status!==404 && (!robots.ok || !allowedByRobots((await robots.text()).slice(0,100000),'/feed/'))) return null;
     const feed=await fetcher(`${base.origin}/feed/`,{headers,redirect:'manual',signal:AbortSignal.timeout(6000)});
+    checkThrottle(feed);
     if(!feed.ok) return null;
     const sourceSuffix = source ? ` - ${source}` : '';
     const originalTitle=sourceSuffix && title.endsWith(sourceSuffix) ? title.slice(0,-sourceSuffix.length) : title;
@@ -21,8 +30,9 @@ export async function lookupPublisherFeed(title: string, source: string, sourceU
     const item=matches[0];
     if(feedDate && item.pubDate) { const pub=Date.parse(item.pubDate); if(Number.isFinite(pub) && Math.abs(pub-Date.parse(feedDate))>48*3600000) return null; }
     const verified=await inspectPublisher(item.link,sourceUrl,fetcher);
+    if(verified.verificationStatus.includes('http_429')) throw new Error(`publisher HTTP 429; retry later (Retry-After ${verified.retryAfterSeconds || 300}s)`);
     if(!verified.originalUrl || !verified.publisherTitle || normalizeTitle(verified.publisherTitle)!==key) return null;
     if(feedDate && verified.publisherPublishedAt && Math.abs(Date.parse(feedDate)-Date.parse(verified.publisherPublishedAt))>48*3600000) return null;
     return {...verified,googleNewsUrl,resolutionStatus:'verified_publisher_feed'};
-  } catch { return null; }
+  } catch(e) { if(isLiveBudgetError(e) || String(e).includes('HTTP 429'))throw e; return null; }
 }

@@ -52,8 +52,8 @@ async function setup() {
   sqlite.prepare('INSERT INTO direct_sources (id,url,kind,name,discovered_at) VALUES (?,?,?,?,?)').run('src1', 'https://direct.example.org', 'website', 'موقع مباشر', '2026-11-01T00:00:00.000Z');
   sqlite.prepare('INSERT INTO direct_source_interests (interest_key,source_id) VALUES (?,?)').run(keys.idlib, 'src1');
   const directItem = (id, url, title, content, publishedAt) =>
-    sqlite.prepare('INSERT INTO direct_items (id,source_id,url,title,content,published_at,first_seen) VALUES (?,?,?,?,?,?,?)')
-      .run(id, 'src1', url, title, content, publishedAt, '2026-11-21T00:00:00.000Z');
+    sqlite.prepare('INSERT INTO direct_items (id,source_id,url,title,content,published_at,first_seen,verification_status) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, 'src1', url, title, content, publishedAt, '2026-11-21T00:00:00.000Z', 'publisher_title_match');
   directItem('dir1', 'https://direct.example.org/idlib', 'قرار تنظيم البناء في إدلب', 'اجتماع لمناقشة تنظيم البناء في محافظة إدلب', '2026-11-20T08:00:00.000Z');
   directItem('dir2', 'https://direct.example.org/sport', 'مباراة كرة القدم في حلب', 'انتهت المباراة بفوز الفريق المضيف', '2026-11-20T06:00:00.000Z');
   directItem('dir-test', 'https://mock-source.test/direct-item', 'قرار تنظيم البناء في إدلب', 'نص اختباري', '2026-11-20T05:00:00.000Z');

@@ -1,0 +1,17 @@
+{
+  "method":"Post-fix stress sample, frozen before the engine run. The three newest substantive university posts on the immediately preceding public channel page, two earlier ministry academic-cooperation posts not used for tuning, and one Idlib infrastructure report not used for tuning. Purposeful stress selection, not a random or population-representative sample.",
+  "cases":[
+    {"interest":"أخبار وإعلانات جامعة إدلب","events":[
+      {"url":"https://t.me/IdlebUniversity/11777","publishedAt":"2026-11-24T13:27:52Z","description":"إعلان مناقشة ماجستير التمريض"},
+      {"url":"https://t.me/IdlebUniversity/11772","publishedAt":"2026-11-24T12:53:43Z","description":"لقاء تعريفي لطلاب كلية الآداب المستجدين"},
+      {"url":"https://t.me/IdlebUniversity/11766","publishedAt":"2026-11-23T16:01:09Z","description":"جلسة عملية لطلاب الطب البيطري"}
+    ]},
+    {"interest":"آخر أخبار وإعلانات وزارة التعليم العالي","events":[
+      {"url":"https://t.me/SyMOHEASR/14022","publishedAt":"2026-11-23T17:54:24Z","description":"التعاون الثقافي والأكاديمي مع الدنمارك"},
+      {"url":"https://t.me/SyMOHEASR/14019","publishedAt":"2026-11-23T07:34:09Z","description":"إعادة تفعيل المعهد الثقافي الدنماركي"}
+    ]},
+    {"interest":"مشاريع الخدمات والبنية التحتية في إدلب","events":[
+      {"url":"https://sana.sy/governorates/edlib/2636070/","publishedAt":"2026-11-15","description":"تقييم أضرار المنازل وشبكات البنية التحتية في بلدة حاس"}
+    ]}
+  ]
+}

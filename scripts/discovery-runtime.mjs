@@ -1,67 +1,58 @@
 import { build } from 'esbuild';
 import { DatabaseSync } from 'node:sqlite';
-import { readFile, mkdir } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+
+// Keep compiled test modules in memory. Parallel test processes previously wrote the
+// same files, which can fail on Windows when another process has a module mapped.
+async function loadBundle(entry) {
+  const result=await build({entryPoints:[entry],bundle:true,platform:'neutral',format:'esm',write:false});
+  return import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].contents).toString('base64'));
+}
 
 export async function loadEngine() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/engine.mjs');
-  await build({ entryPoints: ['functions/api/_discovery.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/_discovery.ts');
 }
 export async function loadDirect() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/direct-engine.mjs');
-  await build({ entryPoints: ['functions/api/_direct.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/_direct.ts');
 }
+export async function loadDirectRoute() { return loadBundle('functions/api/direct.ts'); }
 export async function loadInterests() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/interests-engine.mjs');
-  await build({ entryPoints: ['functions/api/interests.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/interests.ts');
 }
 export async function loadInterestDiscovery() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/interest-discovery-engine.mjs');
-  await build({ entryPoints: ['functions/api/interests/discover.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/interests/discover.ts');
 }
+export async function loadLiveInterest() { return loadBundle('functions/api/_live_interest.ts'); }
+export async function loadLiveBudget() { return loadBundle('functions/api/_live_budget.ts'); }
 export async function loadNotify() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/notify-engine.mjs');
-  await build({ entryPoints: ['functions/api/_notify.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/_notify.ts');
 }
 export async function loadNotifyRoute() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/notify-route.mjs');
-  await build({ entryPoints: ['functions/api/notify.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/notify.ts');
 }
+export async function loadBetaScheduledRoute() { return loadBundle('functions/api/beta-scheduled.ts'); }
 export async function loadSubscribe() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/subscribe-engine.mjs');
-  await build({ entryPoints: ['functions/api/subscribe.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/subscribe.ts');
 }
 export async function loadTelegramLink() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/telegram-link-engine.mjs');
-  await build({ entryPoints: ['functions/api/telegram/link.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/telegram/link.ts');
 }
 export async function loadTelegram() {
-  await mkdir('.wrangler/discovery', { recursive: true });
-  const outfile = resolve('.wrangler/discovery/telegram-engine.mjs');
-  await build({ entryPoints: ['functions/api/telegram.ts'], bundle: true, platform: 'neutral', format: 'esm', outfile });
-  return import(pathToFileURL(outfile).href + '?v=' + Date.now());
+  return loadBundle('functions/api/telegram.ts');
+}
+export async function loadBeta() {
+  return loadBundle('functions/api/beta.ts');
+}
+export async function loadDigest() {
+  return loadBundle('functions/api/_digest.ts');
+}
+export async function loadStagingMiddleware() {
+  return loadBundle('functions/_middleware.ts');
 }
 export async function openDatabase(filename) {
   const sqlite = new DatabaseSync(filename);
   sqlite.exec('CREATE TABLE IF NOT EXISTS _local_discovery_migrations (name TEXT PRIMARY KEY)');
-  for (const name of ['0001_discovery.sql','0002_discovery_provenance.sql','0003_direct_sources.sql','0004_subscriber_interests.sql','0005_discovery_mock_flag.sql','0006_notifications.sql','0007_telegram_link_tokens.sql','0008_notification_delivery_claim.sql']) {
+  for (const name of ['0001_discovery.sql','0002_discovery_provenance.sql','0003_direct_sources.sql','0004_subscriber_interests.sql','0005_discovery_mock_flag.sql','0006_notifications.sql','0007_telegram_link_tokens.sql','0008_notification_delivery_claim.sql','0009_direct_verification.sql','0010_beta_auth.sql','0011_beta_delivery.sql','0012_interest_monitor_jobs.sql','0013_direct_monitor_progress.sql']) {
     if (!sqlite.prepare('SELECT name FROM _local_discovery_migrations WHERE name=?').get(name)) {
       sqlite.exec(await readFile('migrations/' + name, 'utf8'));
       sqlite.prepare('INSERT INTO _local_discovery_migrations(name) VALUES (?)').run(name);

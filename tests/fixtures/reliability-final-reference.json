@@ -1,0 +1,19 @@
+{
+  "method":"Second post-freeze source sample, selected after the D1 SQL compatibility repair and before its run. Some public posts had appeared in earlier exploratory output, but these specific URLs were not used to tune the repair. Purposive and not representative.",
+  "cases":[
+    {"interest":"أخبار وإعلانات جامعة إدلب","events":[
+      {"url":"https://t.me/IdlebUniversity/11752","publishedAt":"2026-11-22T17:28:01Z","expected":"relevant","description":"ندوة علمية طبية في جامعة إدلب"},
+      {"url":"https://t.me/IdlebUniversity/11729","publishedAt":"2026-11-19T08:58:13Z","expected":"relevant","description":"رحلة علمية لطالبات الهندسة الزراعية"}
+    ]},
+    {"interest":"آخر أخبار وإعلانات وزارة التعليم العالي","events":[
+      {"url":"https://t.me/SyMOHEASR/14035","publishedAt":"2026-11-25T19:39:38Z","expected":"relevant","description":"تعاون التعليم العالي والتنمية الإدارية"},
+      {"url":"https://t.me/SyMOHEASR/14032","publishedAt":"2026-11-25T11:45:26Z","expected":"relevant","description":"التسجيل في مفاضلة الجامعة الافتراضية"},
+      {"url":"https://t.me/SyMOHEASR/14008","publishedAt":"2026-11-22T17:33:05Z","expected":"relevant","description":"إعادة تفعيل المعهد الثقافي الدنماركي"}
+    ]},
+    {"interest":"مشاريع الخدمات والبنية التحتية في إدلب","events":[
+      {"url":"https://sana.sy/governorates/edlib/2623191/","publishedAt":"2026-11-01T14:00:24Z","expected":"relevant","description":"مشروع استبدال شبكة الصرف الصحي في كفرنبل"},
+      {"url":"https://sana.sy/governorates/2642940/","publishedAt":"2026-11-23T11:02:15Z","expected":"irrelevant","description":"توزيع قسائم المازوت للعائلات"},
+      {"url":"https://sana.sy/governorates/edlib/2642405/","publishedAt":"2026-11-22T17:02:41Z","expected":"irrelevant","description":"وفاة أطفال بسبب مخلفات الحرب"}
+    ]}
+  ]
+}

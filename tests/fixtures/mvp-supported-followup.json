@@ -1,0 +1,17 @@
+{
+  "method":"Additional public events not used for the code changes; selected after the earlier results were visible, so this is an exploratory follow-up and not a blinded holdout.",
+  "cases":[
+    {"interest":"أخبار وإعلانات جامعة إدلب","events":[
+      {"url":"https://t.me/IdlebUniversity/11784","publishedAt":"2026-11-24T19:38:17Z","description":"حفل استقبال طالبات كلية الشريعة"}
+    ]},
+    {"interest":"آخر أخبار وإعلانات وزارة التعليم العالي","events":[
+      {"url":"https://t.me/SyMOHEASR/14033","publishedAt":"2026-11-25T18:06:58Z","description":"قرار متعلق بتسجيل المقبولين"},
+      {"url":"https://t.me/SyMOHEASR/14034","publishedAt":"2026-11-25T18:17:02Z","description":"تعديل أحكام التحويل إلى جامعة الفرات"},
+      {"url":"https://t.me/SyMOHEASR/14035","publishedAt":"2026-11-25T19:39:38Z","description":"بحث التعاون بين وزارتي التعليم العالي والتنمية الإدارية"}
+    ]},
+    {"interest":"مشاريع الخدمات والبنية التحتية في إدلب","events":[
+      {"url":"https://sana.sy/governorates/edlib/2637015/","publishedAt":"2026-11-16","description":"تزفيت المحلّق الجنوبي في الدانا"},
+      {"url":"https://sana.sy/governorates/edlib/2633581/","publishedAt":"2026-11-12","description":"تأهيل الطريق المؤدي إلى العدنانية ودير عثمان"}
+    ]}
+  ]
+}
