@@ -27,6 +27,8 @@ export interface Env {
   /** Isolated two-user staging pilot only; never enable on production. */
   STAGING_PILOT_MODE?: string;
   STAGING_D1_ID?: string;
+  /** RSS-only staging MVP mode: restricted host/paths, no Telegram/Beta requirements. */
+  RSS_STAGING_MODE?: string;
 }
 
 // Staging fails closed on malformed, duplicate or more than two identities.
