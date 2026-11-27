@@ -131,7 +131,7 @@ test('overlapping scheduled runs cannot double-send; stale claims recover', asyn
   } finally { sqlite.close(); }
 });
 
-test('the cron worker schedules digest, ingestion and notification delivery', async () => {
+test('the RSS cron schedules ingestion and digests only', async () => {
   const cron = (await import('../cron-worker/index.js')).default;
   const calls = [];
   const original = globalThis.fetch;
@@ -143,20 +143,21 @@ test('the cron worker schedules digest, ingestion and notification delivery', as
     const pending = [];
     await cron.scheduled({ cron: '7 * * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending.push(p) });
     await Promise.all(pending);
-    assert.ok(calls.some((c) => c.url.endsWith('/api/digest') && c.method === 'POST'));
-    assert.equal(calls.find((c) => c.url.endsWith('/api/digest')).headers['x-cron-secret'], 's3cret');
-    const notifyCall = calls.find((c) => c.url.endsWith('/api/notify'));
-    assert.ok(notifyCall);
-    assert.equal(notifyCall.method, 'POST');
-    assert.equal(notifyCall.body.mode, 'deliver');
-    assert.equal(notifyCall.headers['x-cron-secret'], 's3cret');
+    assert.deepEqual(calls.map((c) => c.url), ['https://dial.test/api/digest']);
+    assert.equal(calls[0].method, 'POST');
+    assert.equal(calls[0].headers['x-cron-secret'], 's3cret');
+    assert.ok(!calls.some((c) => c.url.endsWith('/api/notify')));
+    assert.ok(!calls.some((c) => c.url.endsWith('/api/direct')));
 
     calls.length = 0;
     const pending2 = [];
     await cron.scheduled({ cron: '0 1 * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending2.push(p) });
     await Promise.all(pending2);
-    assert.ok(calls.some((c) => c.url.endsWith('/api/ingest')));
-    assert.ok(!calls.some((c) => c.url.endsWith('/api/direct'))); // sweep isolated from the MVP cron
+    assert.deepEqual(calls.map((c) => c.url), ['https://dial.test/api/ingest']);
+    assert.equal(calls[0].method, 'POST');
+    assert.equal(calls[0].headers['x-cron-secret'], 's3cret');
+    assert.ok(!calls.some((c) => c.url.endsWith('/api/notify')));
+    assert.ok(!calls.some((c) => c.url.endsWith('/api/direct')));
 
     calls.length = 0;
     const pending3 = [];
@@ -166,18 +167,34 @@ test('the cron worker schedules digest, ingestion and notification delivery', as
   } finally { globalThis.fetch = original; }
 });
 
-test('scheduler errors from the notify call are caught and reported', async () => {
+test('the RSS cron worker source contains no Telegram or Beta routes', async () => {
+  const source = await readFile(new URL('../cron-worker/index.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('/api/ingest'));
+  assert.ok(source.includes('/api/digest'));
+  assert.ok(!source.includes('/api/notify'));
+  assert.ok(!source.includes('/api/direct'));
+});
+
+test('scheduler transport errors are caught and reported without leaking secrets', async () => {
   const cron = (await import('../cron-worker/index.js')).default;
+  const logs = [];
+  const originalError = console.error;
+  console.error = (...args) => logs.push(args.map(String).join(' '));
   const original = globalThis.fetch;
   globalThis.fetch = async (input) => {
-    if (String(input).endsWith('/api/notify')) throw new Error('boom');
+    if (String(input).endsWith('/api/digest')) throw new Error('boom');
     return new Response('{}', { status: 200 });
   };
   try {
     const pending = [];
     await cron.scheduled({ cron: '7 * * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending.push(p) });
-    await Promise.all(pending); // resolves because the notify rejection is caught
-  } finally { globalThis.fetch = original; }
+    await Promise.all(pending); // resolves because the digest rejection is caught
+    assert.ok(logs.some((l) => l.includes('network error') && l.includes('/api/digest')));
+    assert.ok(!logs.some((l) => l.includes('s3cret')));
+  } finally {
+    console.error = originalError;
+    globalThis.fetch = original;
+  }
 });
 
 test('scheduled calls log non-success HTTP statuses without exposing secrets', async () => {
@@ -190,9 +207,7 @@ test('scheduled calls log non-success HTTP statuses without exposing secrets', a
     globalThis.fetch = async (input) => {
       const href = String(input);
       if (href.endsWith('/api/ingest')) return new Response('{}', { status: 401 });
-      if (href.endsWith('/api/direct')) return new Response('{}', { status: 429 });
       if (href.endsWith('/api/digest')) return new Response('{}', { status: 500 });
-      if (href.endsWith('/api/notify')) return new Response('{}', { status: 200 });
       return new Response('{}', { status: 200 });
     };
     const pending = [];
@@ -200,13 +215,14 @@ test('scheduled calls log non-success HTTP statuses without exposing secrets', a
     await Promise.all(pending);
     assert.ok(logs.some((l) => l.includes('401') && l.includes('/api/ingest')));
     assert.ok(!logs.some((l) => l.includes('/api/direct'))); // isolated: never called by the MVP cron
+    assert.ok(!logs.some((l) => l.includes('/api/notify'))); // Telegram route is not scheduled
 
     logs.length = 0;
     const pending2 = [];
     await cron.scheduled({ cron: '7 * * * *' }, { SITE_URL: 'https://dial.test', CRON_SECRET: 's3cret' }, { waitUntil: (p) => pending2.push(p) });
     await Promise.all(pending2);
     assert.ok(logs.some((l) => l.includes('500') && l.includes('/api/digest')));
-    assert.ok(!logs.some((l) => l.includes('/api/notify'))); // 200 → no error log
+    assert.ok(!logs.some((l) => l.includes('/api/notify'))); // never scheduled by the RSS cron
     assert.ok(!logs.some((l) => l.includes('s3cret'))); // secret never logged
   } finally {
     console.error = originalError;

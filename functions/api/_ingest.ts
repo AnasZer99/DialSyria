@@ -4,6 +4,7 @@ import {
   INGEST_LOOKBACK_HOURS,
   ARTICLE_RETENTION_DAYS,
   MAX_ITEMS_PER_FEED,
+  MAX_ITEMS_HARD_CAP,
   type RssSource,
 } from "./_rss_sources";
 import { canonicalUrl, classifyTopic, detectScope } from "./_classify";
@@ -77,13 +78,13 @@ function pick(block: string, tag: string): string {
 
 /**
  * Parse RSS/RDF/Atom items. Unlike the legacy 12-item cap this reads up to
- * `maxItems` (default 100) so a busy daily feed cannot silently lose today's
- * stories. Attribute-bearing <item rdf:about="…"> tags are supported too.
+ * `maxItems` (default 100, hard ceiling 200). High-volume feeds can raise their
+ * own cap in the catalog so a daily run does not drop part of the day.
  */
 export function parseFeed(xml: string, maxItems = MAX_ITEMS_PER_FEED): RssItem[] {
   const items: RssItem[] = [];
   const blocks = xml.match(/<(?:item|entry)(?:\s[^>]*)?>[\s\S]*?<\/(?:item|entry)>/g) || [];
-  const cap = Math.max(0, Math.min(MAX_ITEMS_PER_FEED, maxItems));
+  const cap = Math.max(0, Math.min(MAX_ITEMS_HARD_CAP, maxItems));
   for (const b of blocks.slice(0, cap)) {
     let title = pick(b, "title");
     let link = pick(b, "link");
@@ -228,7 +229,7 @@ export async function runIngestion(
         perSource.push({ source, stats });
         continue;
       }
-      const items = parseFeed(xml, MAX_ITEMS_PER_FEED);
+      const items = parseFeed(xml, Math.min(MAX_ITEMS_HARD_CAP, source.maxItems ?? MAX_ITEMS_PER_FEED));
       stats.parsed = items.length;
       if (!items.length) {
         stats.status = "empty";

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { fetchLiveNews, sendPreview, telegramRequest, waitForPrivateChat } from '../scripts/demo.mjs';
 
 test('demo RSS ingestion uses the existing pipeline with isolated mocked feeds', async () => {
-  const xml = '<rss><channel><item><title>قرار محلي جديد في مدينة إدلب</title><link>https://example.org/real-shaped-article</link><pubDate>Tue, 24 Nov 2026 10:00:00 GMT</pubDate><description>تقرير اختباري فقط لا يمثل خبرا حقيقيا وفيه وصف طويل يتجاوز الحد المطلوب للاختبار.</description><source>مصدر اختبار</source></item></channel></rss>';
+  const fresh = new Date(Date.now() - 3600_000).toUTCString();
+  const xml = `<rss><channel><item><title>قرار محلي جديد في مدينة إدلب</title><link>https://example.org/real-shaped-article</link><pubDate>${fresh}</pubDate><description>تقرير اختباري فقط لا يمثل خبرا حقيقيا وفيه وصف طويل يتجاوز الحد المطلوب للاختبار.</description><source>مصدر اختبار</source></item></channel></rss>`;
   let requests = 0;
   const { report, articles } = await fetchLiveNews({ fetcher: async () => { requests++; return new Response(xml, { status: 200 }); }, log: () => {} });
   assert.equal(report.feeds_fail, 0);

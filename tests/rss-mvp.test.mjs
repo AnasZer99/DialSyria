@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { openDatabase as openIsolated, loadIngest, loadClassify, loadEmail, loadNewsRoute, loadDigest } from '../scripts/discovery-runtime.mjs';
 
 const ingest = await loadIngest();
@@ -317,6 +318,21 @@ test('a feed with more than 100 items stores the first 100 without loss or dupli
   } finally { sqlite.close(); }
 });
 
+test('a high-volume source with a raised per-feed cap stores the whole feed window', async () => {
+  const { db, sqlite } = await openDatabase(':memory:');
+  const items = Array.from({ length: 150 }, (_, i) => item(`خبر يومي رقم ${i + 1} في سوريا`, `https://sana-like.example/${i}`, iso(-i * 60000)));
+  const fetcher = mapFetcher({ 'https://sana-like.example/feed/': okFeed(rss(...items)) });
+  try {
+    const result = await ingest.runIngestion({ DB: db }, {
+      fetcher,
+      sources: [source('sana-like', 'https://sana-like.example/feed/', { maxItems: 200 })],
+    });
+    assert.equal(result.sources[0].parsed, 150);
+    assert.equal(result.inserted, 150);
+    assert.equal(sqlite.prepare('SELECT count(*) n FROM articles').get().n, 150);
+  } finally { sqlite.close(); }
+});
+
 test('a feed with no items in the last 24 hours still succeeds and stores the 72-hour window', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
   const fetcher = mapFetcher({
@@ -388,4 +404,26 @@ test('no digest email is sent while the provider is not configured', async () =>
     assert.equal(sqlite.prepare("SELECT status FROM digests WHERE subscriber_id='sub-4'").get().status, 'no_provider');
     assert.equal(sqlite.prepare("SELECT last_digest_at FROM subscribers WHERE id='sub-4'").get().last_digest_at, null);
   } finally { sqlite.close(); }
+});
+
+test('a fresh database can be created from schema.sql and migration 0014 is idempotent', async () => {
+  const migration = await readFile('migrations/0014_ingestion_sources.sql', 'utf8');
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(LEGACY_SCHEMA);
+    db.exec(migration);
+    db.exec(migration); // re-applying the additive migration must be a no-op
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
+    for (const t of ['subscribers', 'subscriber_topics', 'articles', 'ingestion_runs', 'rate_limits', 'digests', 'ingestion_sources']) {
+      assert.ok(tables.includes(t), 'missing table ' + t);
+    }
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all().map((r) => r.name);
+    for (const i of ['idx_ingestion_sources_run', 'idx_articles_scope_topic', 'idx_articles_fetched']) {
+      assert.ok(indexes.includes(i), 'missing index ' + i);
+    }
+    const cols = db.prepare('PRAGMA table_info(ingestion_sources)').all().map((c) => c.name);
+    for (const c of ['run_started_at', 'source_id', 'source_name', 'status', 'http_status', 'parsed', 'recent', 'inserted', 'error']) {
+      assert.ok(cols.includes(c), 'missing column ' + c);
+    }
+  } finally { db.close(); }
 });

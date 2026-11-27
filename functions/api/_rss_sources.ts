@@ -19,6 +19,11 @@ export interface RssSource {
   /** publisher = direct publisher feed; aggregator = intermediary index. */
   kind: "publisher" | "aggregator";
   enabled: boolean;
+  /**
+   * Per-feed parse cap. Defaults to MAX_ITEMS_PER_FEED (100). High-volume feeds
+   * measured near or above 100 items/day may raise it up to MAX_ITEMS_HARD_CAP.
+   */
+  maxItems?: number;
   note?: string;
 }
 
@@ -32,7 +37,8 @@ export const RSS_SOURCES: RssSource[] = [
     topic: "politics",
     kind: "publisher",
     enabled: true,
-    note: "State news agency. 150 fresh items on 2026-11-26. Reachability is intermittent; a failed run is recorded and retried the next day.",
+    maxItems: 200,
+    note: "State news agency. 150 fresh items on 2026-11-26. Measured 2026-11-27: the feed exposes 150 items covering ~21.5h, so the default 100 cap would drop the older ~10h of every day; the per-feed cap is raised to 200 to store everything the feed publishes. The feed itself truncates at 150 items, so coverage beyond that window is not guaranteed. Reachability is intermittent; a failed run is recorded and retried the next day.",
   },
   {
     id: "syria-tv",
@@ -42,7 +48,7 @@ export const RSS_SOURCES: RssSource[] = [
     topic: "politics",
     kind: "publisher",
     enabled: true,
-    note: "125 fresh items on 2026-11-26; independent Syrian broadcaster.",
+    note: "125 fresh items on 2026-11-26; independent Syrian broadcaster. Measured 2026-11-27: 118 items spanning ~46h (~50-60/day), so the default 100 cap already covers more than 24h; no raised cap needed.",
   },
   {
     id: "north-press",
@@ -167,5 +173,7 @@ export const enabledSources = (): RssSource[] => RSS_SOURCES.filter((s) => s.ena
 export const INGEST_LOOKBACK_HOURS = 72;
 /** Retention for stored articles shown on the site. */
 export const ARTICLE_RETENTION_DAYS = 14;
-/** Maximum items parsed per feed per run (protects memory and D1 writes). */
+/** Maximum items parsed per feed per run (default; protects memory and D1 writes). */
 export const MAX_ITEMS_PER_FEED = 100;
+/** Absolute ceiling for a single feed's raised cap (see per-source `maxItems`). */
+export const MAX_ITEMS_HARD_CAP = 200;

@@ -22,13 +22,13 @@ export default {
       // Daily RSS ingestion at 01:00 UTC = 04:00 Damascus (UTC+3, no DST).
       // The ingest route refuses a second clean run for the same Damascus day.
       ctx.waitUntil(ping(base + "/api/ingest", { method: "POST", headers }));
-    } else if (event.cron === "7 * * * *") {
-      // digests: at minute :07 of every hour, send to subscribers whose
-      // chosen Damascus hour matches the current hour
-      ctx.waitUntil(ping(base + "/api/digest", { method: "POST", headers }));
-      // personalized notifications: prepare each run; real delivery is gated behind
-      // TELEGRAM_DELIVERY_ENABLED and the test-recipient allowlist on the Pages side.
-      ctx.waitUntil(ping(base + "/api/notify", { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ mode: "deliver" }) }));
+       } else if (event.cron === "7 * * * *") {
+      ctx.waitUntil(
+        ping(base + "/api/digest", {
+          method: "POST",
+          headers
+        })
+      );
     }
   },
 };
