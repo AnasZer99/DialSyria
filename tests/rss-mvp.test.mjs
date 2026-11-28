@@ -75,9 +75,67 @@ test('every supported topic is classified from Arabic titles', () => {
   assert.equal(classify.classifyTopic('عنوان بلا كلمات مفتاحية'), null);
 });
 
-test('scope rules: Syrian city, Syrian+foreign, foreign-only and fallback', () => {
+test('classification regressions from the live staging misclassifications', () => {
+  // «الصين تؤكد...» — previously fell back to politics from a general feed.
+  assert.equal(classify.classifyTopic('الصين تؤكد ضرورة اتخاذ تدابير جديدة لتعزيز استقرار سوق رأس المال'), 'economy');
+  assert.equal(classify.detectScope('الصين تؤكد ضرورة اتخاذ تدابير جديدة لتعزيز استقرار سوق رأس المال', 'syria'), 'global');
+  // «مجتمع الأعمال الصيني يدعو واشنطن...» — customs tariffs are economy.
+  assert.equal(classify.classifyTopic('مجتمع الأعمال الصيني يدعو واشنطن لسحب الرسوم الجمركية المقترحة على بكين'), 'economy');
+  assert.equal(classify.detectScope('مجتمع الأعمال الصيني يدعو واشنطن لسحب الرسوم الجمركية المقترحة على بكين', 'syria'), 'global');
+  // «أربيل تتهم بغداد...» — foreign cities from a Syrian feed stay world news.
+  assert.equal(classify.classifyTopic('أربيل تتهم بغداد بانتهاك ست مواد دستورية رئيسية'), 'politics');
+  assert.equal(classify.detectScope('أربيل تتهم بغداد بانتهاك ست مواد دستورية رئيسية', 'syria'), 'global');
+  // «تدمير صاروخ كروز...الرياض» — missile/militia is politics; Riyadh is foreign.
+  assert.equal(classify.classifyTopic('تدمير صاروخ كروز أطلقته ميليشيا الحوثي باتجاه الرياض'), 'politics');
+  assert.equal(classify.detectScope('تدمير صاروخ كروز أطلقته ميليشيا الحوثي باتجاه الرياض', 'syria'), 'global');
+  // Education and odd-interest stories are NOT politics by default: excluded.
+  assert.equal(classify.classifyTopic('وزارة التربية والتعليم تحدد ضوابط تنظيم الشعب الصفية'), null);
+  assert.equal(classify.classifyTopic('صيد استثنائي في نيويورك.. سمكة بوربوت نادرة'), null);
+  assert.equal(classify.detectScope('صيد استثنائي في نيويورك.. سمكة بوربوت نادرة', 'syria'), 'global');
+  assert.equal(classify.classifyTopic('عاصفة قوية تخلف فيضانات وانقطاعًا واسعًا للكهرباء في أمريكا'), null);
+  assert.equal(classify.detectScope('عاصفة قوية تخلف فيضانات وانقطاعًا واسعًا للكهرباء في أمريكا', 'syria'), 'global');
+  // Syrian sports event stays local.
+  assert.equal(classify.classifyTopic('غداً.. ختام بطولة النصر الدولية لفروسية قفز الحواجز في ريف دمشق'), 'sports');
+  assert.equal(classify.detectScope('غداً.. ختام بطولة النصر الدولية لفروسية قفز الحواجز في ريف دمشق', 'global'), 'syria');
+  // Word-boundary guards: partial matches must not misfire.
+  assert.equal(classify.detectScope('البابا يلتقي وفداً في الفاتيكان', 'syria'), 'global'); // البابا ≠ مدينة الباب
+  assert.equal(classify.detectScope('حفل رياضي في الرياض', 'syria'), 'global'); // الرياض ≠ صفة «الرياضي»
+});
+
+test('clear six-category stories are never excluded for keyword gaps', () => {
+  const mustClassify = [
+    ['اجتماع طارئ لمجلس الوزراء لبحث الأوضاع العامة', 'politics'],
+    ['مظاهرات احتجاجية في مدينة حلب تطالب بإصلاحات', 'politics'],
+    ['إقرار ميزانية جديدة للدولة ورفع الرواتب', 'economy'],
+    ['ارتفاع أسعار الوقود والمحروقات هذا الشهر', 'economy'],
+    ['تحديث تطبيق الدفع الإلكتروني لسداد الفواتير', 'tech'],
+    ['انطلاق سباق الدراجات في مدينة حمص', 'sports'],
+    ['منتخب سوريا يواجه نظيره الليبي في مباراة ودية', 'sports'],
+    ['حملة تلقيح ضد الإنفلونزا في المدارس', 'health'],
+    ['افتتاح جناح جديد في مستشفى حماة', 'health'],
+    ['فيلم وثائقي جديد يوثق تراث دير الزور', 'culture'],
+    ['افتتاح معرض الكتاب في ساحة جامعة دمشق', 'culture'],
+  ];
+  for (const [title, expected] of mustClassify) {
+    assert.equal(classify.classifyTopic(title), expected, title);
+  }
+  // Scopes for the same set: Syrian geography stays local, foreign stays global.
+  assert.equal(classify.detectScope('مظاهرات احتجاجية في مدينة حلب تطالب بإصلاحات', 'global'), 'syria');
+  assert.equal(classify.detectScope('منتخب سوريا يواجه نظيره الليبي في مباراة ودية', 'global'), 'syria');
+  assert.equal(classify.detectScope('فيلم وثائقي جديد يوثق تراث دير الزور', 'global'), 'syria');
+});
+
+test('Syrian stories mentioning foreign countries keep the syria scope', () => {
+  assert.equal(classify.detectScope('سوريا وتركيا توقعان اتفاقاً تجارياً جديداً', 'syria'), 'syria');
+  assert.equal(classify.classifyTopic('سوريا وتركيا توقعان اتفاقاً تجارياً جديداً'), 'economy');
+  assert.equal(classify.detectScope('وزير الخارجية السوري يلتقي نظيره التركي في دمشق', 'global'), 'syria');
+  assert.equal(classify.detectScope('الجيش السوري ينشر مركزاً عسكرياً جديداً في حلب', 'global'), 'syria');
+  assert.equal(classify.classifyTopic('الجيش السوري ينشر مركزاً عسكرياً جديداً في حلب'), 'politics');
+});
+
+test('scope rules: Syrian city, Syria word, foreign-only and fallback', () => {
   assert.equal(classify.detectScope('إدلب: مشروع تزفيت طرق', 'global'), 'syria');
-  assert.equal(classify.detectScope('سوريا وتركيا تبحثان اتفاقاً جديداً', 'syria'), 'global');
+  assert.equal(classify.detectScope('سوريا وتركيا تبحثان اتفاقاً جديداً', 'syria'), 'syria');
   assert.equal(classify.detectScope('انتخابات في فرنسا', 'syria'), 'global');
   assert.equal(classify.detectScope('افتتاح معرض محلي', 'syria'), 'syria');
   assert.equal(classify.detectScope('افتتاح معرض محلي', 'global'), 'global');
@@ -89,13 +147,13 @@ test('ingestion stores fresh Arabic items, skips old and foreign-language items,
   const { db, sqlite } = await openDatabase(':memory:');
   const fetcher = mapFetcher({
     'https://a.example/feed/': okFeed(rss(
-      item('مشروع مياه جديد في إدلب', 'https://publisher.example/water?utm_source=rss', iso(-3600000), 'تفاصيل كافية عن مشروع مياه جديد في محافظة إدلب يخدم عدة بلدات ويبدأ العمل فيه هذا الشهر.'),
+      item('مشروع مياه حكومي جديد في إدلب', 'https://publisher.example/water?utm_source=rss', iso(-3600000), 'تفاصيل كافية عن مشروع مياه حكومي جديد في محافظة إدلب يخدم عدة بلدات ويبدأ العمل فيه هذا الشهر.'),
       item('Breaking news in English only', 'https://publisher.example/en', iso(-3600000)),
       item('خبر قديم في حلب', 'https://publisher.example/old', iso(-20 * DAY)),
-      item('خبر بلا تاريخ نشر في حمص', 'https://publisher.example/nodate'),
+      item('خبر بلا تاريخ نشر في حمص عن مستشفى جديد', 'https://publisher.example/nodate'),
     )),
     'https://b.example/feed/': okFeed(rss(
-      item('نفس الخبر من مصدر ثانٍ', 'https://publisher.example/water', iso(-3600000)),
+      item('نفس مشروع المياه الحكومي في إدلب من مصدر ثانٍ', 'https://publisher.example/water', iso(-3600000)),
       item('افتتاح مركز صحي في دمشق', 'https://publisher.example/clinic', iso(-7200000)),
     )),
   });
@@ -116,10 +174,38 @@ test('ingestion stores fresh Arabic items, skips old and foreign-language items,
   } finally { sqlite.close(); }
 });
 
+test('titles without a confident topic are excluded and counted, not defaulted to politics', async () => {
+  const { db, sqlite } = await openDatabase(':memory:');
+  const fetcher = mapFetcher({
+    'https://mix.example/feed/': okFeed(rss(
+      item('وزارة التربية والتعليم تحدد ضوابط تنظيم الشعب الصفية', 'https://mix.example/1', iso(-3600000)),
+      item('صيد استثنائي في نيويورك.. سمكة بوربوت نادرة', 'https://mix.example/2', iso(-3600000)),
+      item('عاصفة قوية تخلف فيضانات وانقطاعًا للكهرباء في أمريكا', 'https://mix.example/3', iso(-3600000)),
+      item('خبر سياسي محدد في إدلب', 'https://mix.example/4', iso(-3600000)),
+    )),
+  });
+  try {
+    const result = await ingest.runIngestion({ DB: db }, { fetcher, sources: [source('mix', 'https://mix.example/feed/')] });
+    assert.equal(result.feeds_ok, 1);
+    assert.equal(result.feeds_fail, 0);
+    assert.equal(result.inserted, 1);
+    assert.equal(result.sources[0].parsed, 4);
+    assert.equal(result.sources[0].recent, 1);
+    assert.equal(result.sources[0].unclassified, 3);
+    assert.equal(sqlite.prepare('SELECT count(*) n FROM articles').get().n, 1);
+    assert.equal(sqlite.prepare("SELECT topic, scope FROM articles WHERE url='https://mix.example/4'").get().topic, 'politics');
+    // The exclusion count is persisted in the idempotent companion table (0015).
+    assert.equal(
+      sqlite.prepare("SELECT unclassified FROM ingestion_source_skips WHERE source_id='mix'").get().unclassified,
+      3,
+    );
+  } finally { sqlite.close(); }
+});
+
 test('one failing source never blocks the others; 404, timeout and broken XML are recorded', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
   const fetcher = mapFetcher({
-    'https://ok.example/feed/': okFeed(rss(item('خبر محلي جديد في إدلب', 'https://ok.example/1', iso(-3600000)))),
+    'https://ok.example/feed/': okFeed(rss(item('خبر سياسي محلي جديد في إدلب', 'https://ok.example/1', iso(-3600000)))),
     'https://missing.example/feed/': () => new Response('', { status: 404 }),
     'https://slow.example/feed/': new Error('The operation timed out'),
     'https://broken.example/feed/': okFeed('<html><body>not rss</body></html>'),
@@ -150,7 +236,7 @@ test('one failing source never blocks the others; 404, timeout and broken XML ar
 
 test('a busy feed with more than 12 items keeps every fresh item', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
-  const items = Array.from({ length: 20 }, (_, i) => item(`خبر عربي رقم ${i + 1} في إدلب`, `https://busy.example/${i}`, iso(-i * 60000)));
+  const items = Array.from({ length: 20 }, (_, i) => item(`خبر سياسي عربي رقم ${i + 1} في إدلب`, `https://busy.example/${i}`, iso(-i * 60000)));
   const fetcher = mapFetcher({ 'https://busy.example/feed/': okFeed(rss(...items)) });
   try {
     const result = await ingest.runIngestion({ DB: db }, { fetcher, sources: [source('busy', 'https://busy.example/feed/')] });
@@ -161,7 +247,7 @@ test('a busy feed with more than 12 items keeps every fresh item', async () => {
 
 test('a second run on the same Damascus day is a no-op; a forced rerun cannot duplicate rows', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
-  const fetcher = mapFetcher({ 'https://once.example/feed/': okFeed(rss(item('خبر يومي جديد في إدلب', 'https://once.example/1', iso(-3600000)))) });
+  const fetcher = mapFetcher({ 'https://once.example/feed/': okFeed(rss(item('خبر سياسي يومي جديد في إدلب', 'https://once.example/1', iso(-3600000)))) });
   try {
     const first = await ingest.runIngestion({ DB: db }, { fetcher, sources: [source('once', 'https://once.example/feed/')] });
     assert.equal(first.skipped, undefined);
@@ -308,7 +394,7 @@ test('beta Telegram delivery stays disabled by default while the digest is indep
 
 test('a feed with more than 100 items stores the first 100 without loss or duplication', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
-  const items = Array.from({ length: 150 }, (_, i) => item(`خبر يومي رقم ${i + 1} في سوريا`, `https://big.example/${i}`, iso(-i * 60000)));
+  const items = Array.from({ length: 150 }, (_, i) => item(`خبر سياسي يومي رقم ${i + 1} في سوريا`, `https://big.example/${i}`, iso(-i * 60000)));
   const fetcher = mapFetcher({ 'https://big.example/feed/': okFeed(rss(...items)) });
   try {
     const result = await ingest.runIngestion({ DB: db }, { fetcher, sources: [source('big', 'https://big.example/feed/')] });
@@ -320,7 +406,7 @@ test('a feed with more than 100 items stores the first 100 without loss or dupli
 
 test('a high-volume source with a raised per-feed cap stores the whole feed window', async () => {
   const { db, sqlite } = await openDatabase(':memory:');
-  const items = Array.from({ length: 150 }, (_, i) => item(`خبر يومي رقم ${i + 1} في سوريا`, `https://sana-like.example/${i}`, iso(-i * 60000)));
+  const items = Array.from({ length: 150 }, (_, i) => item(`خبر سياسي يومي رقم ${i + 1} في سوريا`, `https://sana-like.example/${i}`, iso(-i * 60000)));
   const fetcher = mapFetcher({ 'https://sana-like.example/feed/': okFeed(rss(...items)) });
   try {
     const result = await ingest.runIngestion({ DB: db }, {
@@ -337,8 +423,8 @@ test('a feed with no items in the last 24 hours still succeeds and stores the 72
   const { db, sqlite } = await openDatabase(':memory:');
   const fetcher = mapFetcher({
     'https://quiet.example/feed/': okFeed(rss(
-      item('خبر عمره ثلاثون ساعة في إدلب', 'https://quiet.example/30h', iso(-30 * 3600000)),
-      item('خبر عمره خمسون ساعة في حلب', 'https://quiet.example/50h', iso(-50 * 3600000)),
+      item('خبر سياسي عمره ثلاثون ساعة في إدلب', 'https://quiet.example/30h', iso(-30 * 3600000)),
+      item('خبر سياسي عمره خمسون ساعة في حلب', 'https://quiet.example/50h', iso(-50 * 3600000)),
     )),
     'https://stale.example/feed/': okFeed(rss(
       item('خبر قديم جدا في حمص', 'https://stale.example/5d', iso(-5 * DAY)),
@@ -363,8 +449,8 @@ test('a partial run can be retried the same day and a clean run then blocks furt
   let health = { a: 200, b: 500 };
   const fetcher = async (input) => {
     const url = String(input);
-    if (url === 'https://a.example/feed/') return new Response(rss(item('خبر من المصدر أ في إدلب', 'https://a.example/1', iso(-3600000))), { status: health.a });
-    if (url === 'https://b.example/feed/') return new Response(rss(item('خبر من المصدر ب في حلب', 'https://b.example/1', iso(-3600000))), { status: health.b });
+    if (url === 'https://a.example/feed/') return new Response(rss(item('خبر سياسي من المصدر أ في إدلب', 'https://a.example/1', iso(-3600000))), { status: health.a });
+    if (url === 'https://b.example/feed/') return new Response(rss(item('خبر سياسي من المصدر ب في حلب', 'https://b.example/1', iso(-3600000))), { status: health.b });
     throw new Error('unexpected ' + url);
   };
   try {
@@ -406,23 +492,26 @@ test('no digest email is sent while the provider is not configured', async () =>
   } finally { sqlite.close(); }
 });
 
-test('a fresh database can be created from schema.sql and migration 0014 is idempotent', async () => {
+test('a fresh database can be created from schema.sql and migrations 0014/0015 apply idempotently', async () => {
   const migration = await readFile('migrations/0014_ingestion_sources.sql', 'utf8');
+  const migration15 = await readFile('migrations/0015_ingestion_unclassified.sql', 'utf8');
   const db = new DatabaseSync(':memory:');
   try {
     db.exec(LEGACY_SCHEMA);
     db.exec(migration);
     db.exec(migration); // re-applying the additive migration must be a no-op
+    db.exec(migration15);
+    db.exec(migration15); // 0015 is CREATE IF NOT EXISTS: safe on every path
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
-    for (const t of ['subscribers', 'subscriber_topics', 'articles', 'ingestion_runs', 'rate_limits', 'digests', 'ingestion_sources']) {
+    for (const t of ['subscribers', 'subscriber_topics', 'articles', 'ingestion_runs', 'rate_limits', 'digests', 'ingestion_sources', 'ingestion_source_skips']) {
       assert.ok(tables.includes(t), 'missing table ' + t);
     }
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all().map((r) => r.name);
-    for (const i of ['idx_ingestion_sources_run', 'idx_articles_scope_topic', 'idx_articles_fetched']) {
+    for (const i of ['idx_ingestion_sources_run', 'idx_articles_scope_topic', 'idx_articles_fetched', 'idx_ingestion_source_skips_run']) {
       assert.ok(indexes.includes(i), 'missing index ' + i);
     }
-    const cols = db.prepare('PRAGMA table_info(ingestion_sources)').all().map((c) => c.name);
-    for (const c of ['run_started_at', 'source_id', 'source_name', 'status', 'http_status', 'parsed', 'recent', 'inserted', 'error']) {
+    const cols = db.prepare('PRAGMA table_info(ingestion_source_skips)').all().map((c) => c.name);
+    for (const c of ['run_started_at', 'source_id', 'source_name', 'unclassified']) {
       assert.ok(cols.includes(c), 'missing column ' + c);
     }
   } finally { db.close(); }

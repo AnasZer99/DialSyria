@@ -48,7 +48,7 @@ export const RSS_SOURCES: RssSource[] = [
     topic: "politics",
     kind: "publisher",
     enabled: true,
-    note: "125 fresh items on 2026-11-26; independent Syrian broadcaster. Measured 2026-11-27: 118 items spanning ~46h (~50-60/day), so the default 100 cap already covers more than 24h; no raised cap needed.",
+    note: "125 fresh items on 2026-11-26; independent Syrian broadcaster. Measured 2026-11-27: 118 items spanning ~46h (~50-60/day), so the default 100 cap already covers more than 24h; no raised cap needed. HTTP 403 appears intermittently AT THE CLOUDFLARE EDGE (the 2026-11-27 staging ingest failed with it) while local probes from the dev machine returned 200 on 2026-11-28 across /rss, /rss.xml and /feed with 106 items — local success does NOT prove edge access. The failure is isolated and retried by the next run; no protection bypass is used.",
   },
   {
     id: "north-press",

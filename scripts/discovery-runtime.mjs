@@ -57,7 +57,7 @@ export async function loadStagingMiddleware() {
 export async function openDatabase(filename) {
   const sqlite = new DatabaseSync(filename);
   sqlite.exec('CREATE TABLE IF NOT EXISTS _local_discovery_migrations (name TEXT PRIMARY KEY)');
-  for (const name of ['0001_discovery.sql','0002_discovery_provenance.sql','0003_direct_sources.sql','0004_subscriber_interests.sql','0005_discovery_mock_flag.sql','0006_notifications.sql','0007_telegram_link_tokens.sql','0008_notification_delivery_claim.sql','0009_direct_verification.sql','0010_beta_auth.sql','0011_beta_delivery.sql','0012_interest_monitor_jobs.sql','0013_direct_monitor_progress.sql','0014_ingestion_sources.sql']) {
+  for (const name of ['0001_discovery.sql','0002_discovery_provenance.sql','0003_direct_sources.sql','0004_subscriber_interests.sql','0005_discovery_mock_flag.sql','0006_notifications.sql','0007_telegram_link_tokens.sql','0008_notification_delivery_claim.sql','0009_direct_verification.sql','0010_beta_auth.sql','0011_beta_delivery.sql','0012_interest_monitor_jobs.sql','0013_direct_monitor_progress.sql','0014_ingestion_sources.sql','0015_ingestion_unclassified.sql']) {
     if (!sqlite.prepare('SELECT name FROM _local_discovery_migrations WHERE name=?').get(name)) {
       sqlite.exec(await readFile('migrations/' + name, 'utf8'));
       sqlite.prepare('INSERT INTO _local_discovery_migrations(name) VALUES (?)').run(name);

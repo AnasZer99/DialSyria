@@ -19,7 +19,6 @@ test('RSS catalog entries are well-formed, HTTPS and documented', async () => {
   assert.ok(enabledSources().every((s) => s.enabled));
   assert.equal(MAX_ITEMS_PER_FEED, 100);
   assert.equal(MAX_ITEMS_HARD_CAP, 200);
-  // The only source measured above the default cap is SANA (150 items / ~21.5h).
   const raised = RSS_SOURCES.filter((s) => s.maxItems !== undefined).map((s) => s.id);
   assert.deepEqual(raised, ['sana']);
   assert.equal(RSS_SOURCES.find((s) => s.id === 'sana').maxItems, 200);

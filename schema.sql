@@ -69,5 +69,17 @@ CREATE TABLE IF NOT EXISTS ingestion_sources (
   PRIMARY KEY (run_started_at, source_id)
 );
 CREATE INDEX IF NOT EXISTS idx_ingestion_sources_run ON ingestion_sources(run_started_at);
+-- Per-source unclassified (excluded) counts in their own idempotent companion
+-- table; definition matches migrations/0015 exactly so fresh schema.sql
+-- databases and migration upgrades converge on the same shape (safe on every
+-- path: existing DBs, new DBs, repeated applications).
+CREATE TABLE IF NOT EXISTS ingestion_source_skips (
+  run_started_at TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  unclassified INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (run_started_at, source_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ingestion_source_skips_run ON ingestion_source_skips(run_started_at);
 CREATE INDEX IF NOT EXISTS idx_articles_scope_topic ON articles(scope, topic, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_fetched ON articles(fetched_at);

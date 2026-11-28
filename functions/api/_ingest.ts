@@ -1,4 +1,4 @@
-import { Env, nowISO, uuid, damascusHour, damascusTodayStartISO, type Topic, VALID_TOPICS } from "./_lib";
+import { Env, nowISO, uuid, damascusHour, damascusTodayStartISO, type Topic } from "./_lib";
 import {
   RSS_SOURCES,
   INGEST_LOOKBACK_HOURS,
@@ -127,6 +127,8 @@ export interface IngestionSourceResult {
   httpStatus: number | null;
   parsed: number;
   recent: number;
+  /** Fresh items skipped because no topic keyword gave a confident classification. */
+  unclassified: number;
   inserted: number;
   error: string | null;
 }
@@ -215,6 +217,7 @@ export async function runIngestion(
       httpStatus: null,
       parsed: 0,
       recent: 0,
+      unclassified: 0,
       inserted: 0,
       error: null,
     };
@@ -255,8 +258,13 @@ export async function runIngestion(
         if (publishedISO && Date.parse(publishedISO) < cutoff) continue;
         const url = canonicalUrl(it.link);
         if (!url || seen.has(url)) continue;
-        const topic = classifyTopic(title) ?? source.topic;
-        if (!VALID_TOPICS.includes(topic)) continue;
+        // No confident topic: exclude the item instead of defaulting it to
+        // politics. The exclusion is counted per source for auditing.
+        const topic = classifyTopic(title);
+        if (!topic) {
+          stats.unclassified++;
+          continue;
+        }
         const scope = detectScope(title, source.scope);
         seen.add(url);
         stats.recent++;
@@ -316,6 +324,25 @@ export async function runIngestion(
     } catch {
       // Observability table may be absent until migration 0014 is applied; the
       // articles themselves are already stored and must not be rolled back.
+    }
+  }
+  // Per-source unclassified counts go in their own idempotent companion table
+  // (migration 0015) so the upgrade path never conflicts with schema.sql.
+  for (const group of chunk(perSource.filter((p) => p.stats.unclassified > 0), DB_BATCH_SIZE)) {
+    try {
+      await env.DB.batch(
+        group.map(({ source, stats }) =>
+          env.DB.prepare(
+            "INSERT OR REPLACE INTO ingestion_source_skips (run_started_at, source_id, source_name, unclassified) VALUES (?,?,?,?)"
+          ).bind(started, source.id, stats.name, stats.unclassified)
+        )
+      );
+    } catch (err) {
+      // Skips table may be absent until migration 0015 is applied; the count
+      // is still returned in the ingest response for auditing. Log the failure
+      // so silent schema drift is visible in server logs, but never let the
+      // recording failure drop the whole ingest run or its stored articles.
+      console.error("[ingest] failed to record ingestion_source_skips:", err);
     }
   }
   result.sources = perSource.map((p) => p.stats);
