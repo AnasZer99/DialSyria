@@ -15,6 +15,7 @@ const webhook = await bundle('functions/api/telegram-mvp.ts');
 const digestRoute = await bundle('functions/api/digest.ts');
 const adminSubs = await bundle('functions/api/admin/subscribers.ts');
 const adminLogin = await bundle('functions/api/admin/login.ts');
+const rssMvp = await bundle('functions/api/_rss_mvp.ts');
 
 const ADMIN_PASSWORD = 'local-admin-password-not-real-1234';
 const MVP_SECRET = 'mvp-webhook-secret-test-only';
@@ -241,6 +242,89 @@ test('AC-07b: a chat already bound to another subscriber cannot be stolen', asyn
     await tg(env, { message: { text: `/start ${second.body.telegram.code}`, chat: { id: 555, type: 'private' }, from: { id: 555 } } });
     assert.ok(mock.messages.at(-1).body.text.includes('مرتبطة باشتراك آخر'));
     assert.equal(sqlite.prepare("SELECT telegram_chat_id FROM subscribers WHERE email='second@example.test'").get().telegram_chat_id, null);
+  } finally { mock.restore(); sqlite.close(); }
+});
+
+// ——— AC-08b/08c: an expired active term is never deliverable ———
+
+test('AC-08b: an active subscriber whose term expired receives no digest', async () => {
+  const { db, sqlite, env } = await makeEnv();
+  const mock = mockTelegram();
+  try {
+    await subscribePending(env, 'expired@example.test');
+    await activateAndLink(sqlite, 'expired@example.test', 707);
+    // Still 'active' but the term ended one hour ago.
+    sqlite.prepare("UPDATE subscribers SET expires_at=? WHERE email='expired@example.test'").run(iso(-3600000));
+
+    // /news answers with the expiry notice and stores no digest.
+    await tg(env, { message: { text: '/news', chat: { id: 707, type: 'private' }, from: { id: 707 } } });
+    assert.ok(mock.messages.at(-1).body.text.includes('انتهت صلاحية'));
+    assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM digests').get().n, 0);
+
+    // The scheduled pass skips the expired account entirely.
+    const hour = new Date(Date.now() + 3 * 3600000).getUTCHours();
+    sqlite.prepare("UPDATE subscribers SET delivery_hour=? WHERE email='expired@example.test'").run(hour);
+    mock.messages.length = 0;
+    const scheduled = await digestRoute.onRequestPost(ctx(new Request('https://dial.test/api/digest', { method: 'POST', headers: { 'x-cron-secret': 'cron-secret-local' } }), env));
+    const body = await scheduled.json();
+    assert.equal(body.mvp.sent, 0);
+    assert.equal(body.mvp.due, 0);
+    assert.equal(mock.messages.length, 0, 'expired account received nothing scheduled');
+    // last_digest_at untouched, so a renewal delivers immediately afterwards.
+    assert.equal(sqlite.prepare("SELECT last_digest_at FROM subscribers WHERE email='expired@example.test'").get().last_digest_at, null);
+  } finally { mock.restore(); sqlite.close(); }
+});
+
+test('AC-08c: the shared delivery executor itself refuses an expired active account', async () => {
+  const { db, sqlite, env } = await makeEnv();
+  const mock = mockTelegram();
+  try {
+    await subscribePending(env, 'direct@example.test');
+    const subId = sqlite.prepare("SELECT id FROM subscribers WHERE email='direct@example.test'").get().id;
+    sqlite.prepare("UPDATE subscribers SET status='active', expires_at=?, telegram_chat_id='708' WHERE id=?").run(iso(-3600000), subId);
+    const topics = sqlite.prepare('SELECT topic FROM subscriber_topics WHERE subscriber_id=?').all(subId).map((r) => r.topic);
+
+    // Call the executor directly (the concurrent path both other callers share).
+    const outcome = await rssMvp.deliverMvpNews(env, { id: subId, chatId: '708', language: 'ar', topics, lastDigestAt: null });
+    assert.equal(outcome.sent, false);
+    assert.equal(outcome.reason, 'not_eligible');
+    assert.equal(mock.messages.length, 0);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM digests').get().n, 0);
+    assert.equal(sqlite.prepare('SELECT last_digest_at FROM subscribers WHERE id=?').get(subId).last_digest_at, null);
+
+    // A renewed term with the same state delivers again.
+    sqlite.prepare('UPDATE subscribers SET expires_at=? WHERE id=?').run(iso(+30 * DAY), subId);
+    const renewed = await rssMvp.deliverMvpNews(env, { id: subId, chatId: '708', language: 'ar', topics, lastDigestAt: null });
+    assert.equal(renewed.sent, true);
+    assert.equal(renewed.reason, 'sent');
+    assert.ok(sqlite.prepare("SELECT last_digest_at FROM subscribers WHERE id=?").get(subId).last_digest_at);
+  } finally { mock.restore(); sqlite.close(); }
+});
+
+// ——— AC-12b: the whole MVP webhook is flag-gated ———
+
+test('AC-12b: with RSS_MVP_MODE off the MVP webhook executes nothing', async () => {
+  const { db, sqlite, env } = await makeEnv();
+  const mock = mockTelegram();
+  try {
+    await subscribePending(env, 'gated@example.test');
+    await activateAndLink(sqlite, 'gated@example.test', 709);
+    const { body } = await subscribePending(env, 'pairer@example.test');
+    const code = body.telegram.code;
+    env.RSS_MVP_MODE = '0'; // journey disabled after setup — webhook must go silent
+
+    mock.messages.length = 0;
+    await tg(env, { message: { text: '/news', chat: { id: 709, type: 'private' }, from: { id: 709 } } });
+    await tg(env, { message: { text: `/start ${code}`, chat: { id: 710, type: 'private' }, from: { id: 710 } } });
+    await tg(env, { message: { text: '/status', chat: { id: 709, type: 'private' }, from: { id: 709 } } });
+    await tg(env, { message: { text: '/stop', chat: { id: 709, type: 'private' }, from: { id: 709 } } });
+    assert.equal(mock.messages.length, 0, 'the webhook is silent while the journey flag is off');
+    // Pairing did not happen and /stop did not write.
+    assert.equal(sqlite.prepare("SELECT telegram_chat_id FROM subscribers WHERE email='pairer@example.test'").get().telegram_chat_id, null);
+    assert.equal(sqlite.prepare("SELECT paused FROM rss_telegram_prefs WHERE subscriber_id=(SELECT id FROM subscribers WHERE email='gated@example.test')").get(), undefined);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM digests').get().n, 0);
+    // Wrong secret still 401s even with the flag off (config order unchanged).
+    assert.equal((await tg(env, { message: { text: '/news', chat: { id: 709, type: 'private' }, from: { id: 709 } } }, { 'x-telegram-bot-api-secret-token': 'wrong' })).status, 401);
   } finally { mock.restore(); sqlite.close(); }
 });
 

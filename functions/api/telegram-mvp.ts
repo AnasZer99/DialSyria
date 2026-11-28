@@ -24,6 +24,9 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   if ((request.headers.get("x-telegram-bot-api-secret-token") || "") !== env.TELEGRAM_MVP_WEBHOOK_SECRET) {
     return new Response("unauthorized", { status: 401 });
   }
+  // The whole MVP journey is flag-gated: with RSS_MVP_MODE not "1" no command
+  // executes and nothing is ever sent (the update is acknowledged silently).
+  if (env.RSS_MVP_MODE !== "1") return json({ ok: true });
   let update: TgUpdate;
   try {
     update = (await request.json()) as TgUpdate;

@@ -26,6 +26,7 @@ const S = {
     empty: "لا توجد أخبار جديدة الآن — جرّب بعد قليل.",
     paused: "استقبال النشرة موقوف من هذا الحساب (/stop). أعد تفعيله من الإدارة.",
     pending: "اشتراكك بانتظار موافقة الإدارة — لن تصلك النشرة حتى يتم تفعيلك.",
+    expired: "انتهت صلاحية اشتراكك — لن تصلك النشرة حتى يجدد المدير اشتراكك.",
     notLinked: "حسابك غير مرتبط. افتح البوت من صفحة الاشتراك أو أرسل /start مع رمز الربط.",
     already24h: "استلمت نشرتك خلال آخر 24 ساعة — نشرتك التالية في موعدك المحدد.",
     linked: "تم ربط حسابك بنجاح ✓\nستصلك نشرة الأخبار عبر تيليجرام بعد تفعيل الاشتراك من الإدارة.",
@@ -40,6 +41,7 @@ const S = {
     empty: "No fresh news right now — try again shortly.",
     paused: "Telegram delivery is stopped for this account (/stop). Re-enable it from the admin.",
     pending: "Your subscription awaits admin approval — the digest starts after activation.",
+    expired: "Your subscription has expired — the digest resumes once the admin renews it.",
     notLinked: "Account not linked. Open the bot from the subscribe screen or send /start with a pairing code.",
     already24h: "You already received a digest within the last 24 hours — the next one arrives at your scheduled time.",
     linked: "Account linked ✓\nYou will receive the news digest on Telegram once the admin activates your subscription.",
@@ -168,8 +170,13 @@ export async function deliverMvpNews(
   const prefs = await env.DB.prepare("SELECT paused FROM rss_telegram_prefs WHERE subscriber_id=?").bind(subscriber.id).first<{ paused: number }>();
   if (prefs?.paused === 1) return { sent: false, reason: "paused", articlesCount: 0 };
 
-  const statusRow = await env.DB.prepare("SELECT status FROM subscribers WHERE id=?").bind(subscriber.id).first<{ status: string }>();
+  const statusRow = await env.DB.prepare("SELECT status, expires_at FROM subscribers WHERE id=?").bind(subscriber.id).first<{ status: string; expires_at: string | null }>();
   if (statusRow?.status !== "active") return { sent: false, reason: "not_eligible", articlesCount: 0 };
+  // An expired term is not deliverable even while status is still 'active'
+  // (covers the concurrent path directly, not just the caller's own checks).
+  if (statusRow.expires_at && new Date(statusRow.expires_at).getTime() <= Date.now()) {
+    return { sent: false, reason: "not_eligible", articlesCount: 0 };
+  }
 
   const sections = await pickSections(env, lang, subscriber.topics, cutoff);
   const picked = sections.flatMap((s) => s.items);
@@ -213,11 +220,12 @@ export async function runMvpDigest(env: Env): Promise<{ due: number; sent: numbe
             (SELECT GROUP_CONCAT(t.topic, ',') FROM subscriber_topics t WHERE t.subscriber_id = s.id) AS topics_csv
      FROM subscribers s
      WHERE s.delivery_hour = ? AND s.status = 'active' AND s.telegram_chat_id IS NOT NULL
+       AND (s.expires_at IS NULL OR s.expires_at > ?)
        AND (s.last_digest_at IS NULL OR s.last_digest_at < ?)
        AND NOT EXISTS (SELECT 1 FROM rss_telegram_prefs p WHERE p.subscriber_id = s.id AND p.paused = 1)
        AND NOT EXISTS (SELECT 1 FROM beta_identities b WHERE b.subscriber_id = s.id AND b.created_beta = 1)
      LIMIT 100`
-  ).bind(hour, cutoff).all<{ id: string; email: string; language: string; telegram_chat_id: string; topics_csv: string | null }>();
+  ).bind(hour, nowISO(), cutoff).all<{ id: string; email: string; language: string; telegram_chat_id: string; topics_csv: string | null }>();
 
   for (const row of due.results) {
     result.due++;
@@ -241,8 +249,8 @@ export async function mvpOnDemandNews(
   send: (text: string) => Promise<unknown>
 ): Promise<MvpDeliveryResult> {
   const row = await env.DB.prepare(
-    "SELECT id, language, status, telegram_chat_id, last_digest_at FROM subscribers WHERE telegram_chat_id = ?"
-  ).bind(chatId).first<{ id: string; language: string; status: string; telegram_chat_id: string; last_digest_at: string | null }>();
+    "SELECT id, language, status, expires_at, telegram_chat_id, last_digest_at FROM subscribers WHERE telegram_chat_id = ?"
+  ).bind(chatId).first<{ id: string; language: string; status: string; expires_at: string | null; telegram_chat_id: string; last_digest_at: string | null }>();
   const lang = (row?.language === "en" ? "en" : "ar") as "ar" | "en";
   if (!row) {
     await send(S[lang].notLinked);
@@ -255,6 +263,10 @@ export async function mvpOnDemandNews(
   }
   if (row.status !== "active") {
     await send(S[lang].pending);
+    return { sent: false, reason: "not_eligible", articlesCount: 0 };
+  }
+  if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+    await send(S[lang].expired);
     return { sent: false, reason: "not_eligible", articlesCount: 0 };
   }
   if (row.last_digest_at && Date.now() - new Date(row.last_digest_at).getTime() < 24 * 3600_000) {
