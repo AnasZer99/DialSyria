@@ -1,8 +1,13 @@
 import { Env, Handler, fail, json, nowISO, uuid, readJson, daysFromNow, siteUrl, VALID_TOPICS, EMAIL_RE, clientIp, rateLimit, type Topic } from "./_lib";
 import { sendEmail } from "./_digest";
+import { createMvpLinkCode } from "./_rss_mvp";
 
 export const onRequestPost: Handler = async ({ request, env }) => {
   if (!env.DB) return fail("database not bound", 500);
+  // RSS MVP journey: a request creates a `pending` subscription for manual admin
+  // review. No payment, no email sending, no automatic activation, and no
+  // account takeover through the email field alone.
+  if (env.RSS_MVP_MODE === "1") return subscribeMvp(request, env);
   if (!env.BREVO_API_KEY || !env.SENDER_EMAIL) return fail("email delivery is not configured", 503);
   if (!(await rateLimit(env, "sub:" + clientIp(request), 10))) return fail("too many requests", 429);
   const body = await readJson<{ email?: string; topics?: string[]; delivery_hour?: number; language?: string; whatsapp?: string }>(request);
@@ -52,3 +57,46 @@ export const onRequestPost: Handler = async ({ request, env }) => {
 
   return json({ ok: true });
 };
+
+/** MVP pending flow: no Brevo, no payment, no trial, manual admin activation. */
+async function subscribeMvp(request: Request, env: Env) {
+  if (!(await rateLimit(env, "rss-sub:" + clientIp(request), 5))) return fail("too many requests", 429);
+  const body = await readJson<{ email?: string; topics?: string[]; delivery_hour?: number; language?: string }>(request);
+
+  const email = (body.email || "").trim().toLowerCase();
+  const topics = Array.isArray(body.topics)
+    ? [...new Set(body.topics)].filter((x): x is Topic => (VALID_TOPICS as readonly string[]).includes(x))
+    : [];
+  const hour = Number(body.delivery_hour);
+  const language = body.language === "en" ? "en" : "ar";
+
+  if (!EMAIL_RE.test(email)) return fail("invalid email");
+  if (topics.length < 1 || topics.length > 3) return fail("choose 1 to 3 topics");
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return fail("invalid hour");
+
+  // Duplicate requests never create a second account and never return any
+  // manage link or token: the email alone proves nothing.
+  const existing = await env.DB.prepare("SELECT id FROM subscribers WHERE email = ?").bind(email).first<{ id: string }>();
+  if (existing) {
+    return json({ ok: true, status: "existing" });
+  }
+
+  const id = uuid();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO subscribers (id, email, language, delivery_hour, status, created_at) VALUES (?,?,?,?,?,?)"
+    ).bind(id, email, language, hour, "pending", nowISO()),
+    ...topics.map((x) =>
+      env.DB.prepare("INSERT INTO subscriber_topics (subscriber_id, topic) VALUES (?, ?)").bind(id, x)
+    ),
+  ]);
+
+  // Safe Telegram handoff: a short-lived, single-use pairing code shown once.
+  // The management token column stays NULL — no magic link exists to steal.
+  const code = await createMvpLinkCode(env, id);
+  return json({
+    ok: true,
+    status: "pending",
+    telegram: { code, bot: env.TELEGRAM_MVP_BOT || "" },
+  });
+}

@@ -12,7 +12,7 @@ export default function Subscribe({ lang, nav }: PageProps) {
   const [digestLang, setDigestLang] = useState<Lang>(lang);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ manage_url?: string } | null>(null);
+  const [done, setDone] = useState<{ status: "pending" | "existing" | "legacy"; manage_url?: string; code?: string; bot?: string } | null>(null);
 
   const toggleTopic = (x: Topic) => {
     setTopics((prev) => {
@@ -37,7 +37,12 @@ export default function Subscribe({ lang, nav }: PageProps) {
         delivery_hour: hour,
         language: digestLang,
       });
-      setDone({ manage_url: r.manage_url });
+      setDone({
+        status: (r as { status?: string }).status === "pending" ? "pending" : (r as { status?: string }).status === "existing" ? "existing" : "legacy",
+        manage_url: r.manage_url,
+        code: r.telegram?.code,
+        bot: r.telegram?.bot,
+      });
     } catch (e) {
       setError(e instanceof Error ? t(lang, "errorGeneric") + " — " + e.message : t(lang, "errorGeneric"));
     } finally {
@@ -46,22 +51,50 @@ export default function Subscribe({ lang, nav }: PageProps) {
   };
 
   if (done) {
+    if (done.status === "legacy") {
+      return (
+        <div className="form">
+          <div className="okbox">
+            <h2>{t(lang, "successTitle")}</h2>
+            <p>{t(lang, "successSub")}</p>
+            {done.manage_url && (
+              <button
+                className="cta"
+                style={{ marginTop: 14 }}
+                onClick={() => {
+                  window.location.href = done.manage_url!;
+                }}
+              >
+                {t(lang, "openManage")}
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    // RSS MVP flow: the request is pending manual admin approval. No payment,
+    // no automatic activation; the pairing code enables the Telegram handoff.
+    const botLink = done.code && done.bot ? `https://t.me/${done.bot}?start=${encodeURIComponent(done.code)}` : "";
     return (
       <div className="form">
         <div className="okbox">
-          <h2>{t(lang, "successTitle")}</h2>
-          <p>{t(lang, "successSub")}</p>
-          {done.manage_url && (
-            <button
-              className="cta"
-              style={{ marginTop: 14 }}
-              onClick={() => {
-                window.location.href = done.manage_url!;
-              }}
-            >
-              {t(lang, "openManage")}
-            </button>
-          )}
+          <h2>{t(lang, "pendingTitle")}</h2>
+          <p>{done.status === "existing" ? t(lang, "pendingExisting") : t(lang, "pendingMsg")}</p>
+          {done.status === "pending" && done.code ? (
+            <>
+              <div className="step"><span className="ltr">5</span> {t(lang, "linkStep")}</div>
+              <div style={{ margin: "8px 0" }}>
+                <span className="ltr" style={{ fontFamily: "monospace", fontSize: 22, letterSpacing: 3 }}>{done.code}</span>
+                <div className="counter">{t(lang, "pairingHint")}</div>
+              </div>
+              {botLink ? (
+                <a className="cta" href={botLink} target="_blank" rel="noreferrer noopener">
+                  {t(lang, "openBot")}
+                </a>
+              ) : null}
+              <div className="note">{t(lang, "pairingExpiry")}</div>
+            </>
+          ) : null}
         </div>
       </div>
     );

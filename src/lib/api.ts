@@ -69,9 +69,16 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+export interface SubscribeResult {
+  ok: boolean;
+  status?: "pending" | "existing";
+  manage_url?: string;
+  telegram?: { code: string; bot: string };
+}
+
 export const api = {
-  subscribe: (p: { email: string; topics: string[]; delivery_hour: number; language: string; whatsapp?: string }) =>
-    req<{ ok: boolean; manage_url?: string }>("/api/subscribe", { method: "POST", body: JSON.stringify(p) }),
+  subscribe: (p: { email: string; topics: string[]; delivery_hour: number; language: string }) =>
+    req<SubscribeResult>("/api/subscribe", { method: "POST", body: JSON.stringify(p) }),
   login: (email: string) =>
     req<{ ok: boolean; manage_url?: string }>("/api/login", { method: "POST", body: JSON.stringify({ email }) }),
   me: (token: string) => req<{ subscriber: Subscriber }>("/api/me?token=" + encodeURIComponent(token)),
@@ -108,7 +115,7 @@ export const adminApi = {
     req<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) }),
   list: (token: string) =>
     req<{
-      subscribers: (Subscriber & { topics: Topic[] })[];
+      subscribers: ((Omit<Subscriber, "topics">) & { topics: Topic[]; telegram_linked: boolean; telegram_paused: boolean })[];
       stats: { total: number; pending: number; trial: number; active: number; expired: number; articles_24h: number };
     }>("/api/admin/subscribers", { headers: { authorization: "Bearer " + token } }),
   action: (token: string, id: string, action: string) =>

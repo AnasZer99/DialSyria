@@ -10,6 +10,10 @@ const middlewareSource = await readFile('functions/_middleware.ts', 'utf8');
 // scripts/RSS_STAGING_MIDDLEWARE_PATCH.md. Until then they are skipped
 // honestly instead of passing against an unpatched file.
 const patchApplied = /env\.RSS_STAGING_MODE\s*===\s*(['"])1\1/.test(middlewareSource);
+// The MVP route extension (scripts/MVP_MIDDLEWARE_PATCH.md) is a separate,
+// owner-applied change; its tests stage the same way and stay honestly skipped
+// until the patch lands in functions/_middleware.ts.
+const mvpPatchApplied = /RSS_MVP_ROUTES/.test(middlewareSource);
 
 const stageId = '71340955-16e4-48f1-b228-97490d886403';
 const origin = 'https://dialsyria-staging.pages.dev';
@@ -121,6 +125,48 @@ test('rss staging mode blocks Beta, Telegram, registration, admin and every othe
       const res = await call(env, origin + path, method);
       assert.equal(res.status, 404, path);
       assert.deepEqual(await res.json(), { error: 'route not available in rss staging mode' });
+    }
+  } finally { sqlite.close(); }
+});
+
+test('rss staging MVP routes open only with RSS_MVP_ROUTES=1', { skip: mvpPatchApplied ? false : 'MVP route extension from scripts/MVP_MIDDLEWARE_PATCH.md not applied yet' }, async () => {
+  const { sqlite, env } = await rssEnv();
+  try {
+    // Default closed: without the explicit flag the journey routes stay 404.
+    assert.equal((await call(env, origin + '/api/subscribe', 'POST')).status, 404);
+    assert.equal((await call(env, origin + '/api/telegram-mvp', 'POST')).status, 404);
+    assert.equal((await call(env, origin + '/api/admin/subscribers')).status, 404);
+    // Explicitly enabled: the exact MVP journey pairs pass through.
+    const mvpEnv = { ...env, RSS_MVP_ROUTES: '1' };
+    assert.equal((await call(mvpEnv, origin + '/api/subscribe', 'POST')).status, 200);
+    assert.equal((await call(mvpEnv, origin + '/api/telegram-mvp', 'POST')).status, 200);
+    assert.equal((await call(mvpEnv, origin + '/api/admin/login', 'POST')).status, 200);
+    assert.equal((await call(mvpEnv, origin + '/api/admin/subscribers')).status, 200);
+    assert.equal((await call(mvpEnv, origin + '/api/admin/subscribers', 'POST')).status, 200);
+    // Method mismatches on allow-listed paths stay blocked.
+    assert.equal((await call(mvpEnv, origin + '/api/subscribe')).status, 404);
+    assert.equal((await call(mvpEnv, origin + '/api/admin/subscribers', 'DELETE')).status, 404);
+  } finally { sqlite.close(); }
+});
+
+test('RSS_MVP_ROUTES=1 never reopens Beta or unlisted API routes', { skip: mvpPatchApplied ? false : 'MVP route extension from scripts/MVP_MIDDLEWARE_PATCH.md not applied yet' }, async () => {
+  const { sqlite, env } = await rssEnv({ RSS_MVP_ROUTES: '1' });
+  try {
+    const blocked = [
+      ['POST', '/api/telegram'],
+      ['POST', '/api/beta'],
+      ['GET', '/api/beta'],
+      ['POST', '/api/notify'],
+      ['POST', '/api/beta-scheduled'],
+      ['POST', '/api/telegram/link'],
+      ['POST', '/api/login'],
+      ['GET', '/api/me'],
+      ['GET', '/api/subscribe'],
+      ['POST', '/api/interests/discover'],
+    ];
+    for (const [method, path] of blocked) {
+      const res = await call(env, origin + path, method);
+      assert.equal(res.status, 404, path);
     }
   } finally { sqlite.close(); }
 });

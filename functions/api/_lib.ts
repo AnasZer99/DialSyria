@@ -29,6 +29,14 @@ export interface Env {
   STAGING_D1_ID?: string;
   /** RSS-only staging MVP mode: restricted host/paths, no Telegram/Beta requirements. */
   RSS_STAGING_MODE?: string;
+  /** RSS MVP subscriber journey (pending→approve→Telegram digest). Off by default. */
+  RSS_MVP_MODE?: string;
+  /** Staging: explicitly extend the RSS staging allowlist with MVP journey routes. */
+  RSS_MVP_ROUTES?: string;
+  /** Dedicated MVP Telegram bot (separate from the legacy Beta bot). */
+  TELEGRAM_MVP_BOT?: string;
+  TELEGRAM_MVP_BOT_TOKEN?: string;
+  TELEGRAM_MVP_WEBHOOK_SECRET?: string;
 }
 
 // Staging fails closed on malformed, duplicate or more than two identities.

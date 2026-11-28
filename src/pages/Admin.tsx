@@ -4,7 +4,7 @@ import { t, type Lang } from "../lib/i18n";
 
 type ListRes = Awaited<ReturnType<typeof adminApi.list>>;
 type SubRow = ListRes["subscribers"][number];
-type AdminAction = "activate" | "renew" | "pause" | "resume" | "delete";
+type AdminAction = "approve" | "reject" | "activate" | "renew" | "pause" | "resume" | "delete";
 
 const TOKEN_KEY = "ds_admin_token";
 
@@ -16,6 +16,7 @@ export default function Admin({ lang }: { lang: Lang; toggleLang: () => void }) 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState("newest");
 
   async function load(tk: string) {
@@ -67,14 +68,15 @@ export default function Admin({ lang }: { lang: Lang; toggleLang: () => void }) 
     const base = subs ?? [];
     const needle = q.trim().toLowerCase();
     const filtered = needle ? base.filter((s) => s.email.toLowerCase().includes(needle)) : base;
+    const scoped = statusFilter === "all" ? filtered : filtered.filter((s) => s.status === statusFilter);
     const expiryOf = (s: SubRow) => s.expires_at || s.trial_ends_at || "";
-    const arr = [...filtered];
+    const arr = [...scoped];
     if (sort === "newest") arr.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
     else if (sort === "oldest") arr.sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
     else if (sort === "expiry_asc") arr.sort((a, b) => (expiryOf(a) > expiryOf(b) ? 1 : -1));
     else arr.sort((a, b) => (expiryOf(a) < expiryOf(b) ? 1 : -1));
     return arr;
-  }, [subs, q, sort]);
+  }, [subs, q, statusFilter, sort]);
 
   async function run(id: string, action: AdminAction) {
     if (!token) return;
@@ -165,6 +167,14 @@ export default function Admin({ lang }: { lang: Lang; toggleLang: () => void }) 
           placeholder={t(lang, "searchPh")}
           onChange={(e) => setQ(e.target.value)}
         />
+        <select className="field" style={{ flex: "0 0 200px" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label={t(lang, "filterStatus")}>
+          <option value="all">{t(lang, "filterAllStatuses")}</option>
+          <option value="pending">{t(lang, "status_pending")}</option>
+          <option value="active">{t(lang, "status_active")}</option>
+          <option value="paused">{t(lang, "status_paused")}</option>
+          <option value="expired">{t(lang, "status_expired")}</option>
+          <option value="cancelled">{t(lang, "status_cancelled")}</option>
+        </select>
         <select className="field" style={{ flex: "0 0 200px" }} value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="newest">{t(lang, "sortNewest")}</option>
           <option value="oldest">{t(lang, "sortOldest")}</option>
@@ -191,6 +201,9 @@ export default function Admin({ lang }: { lang: Lang; toggleLang: () => void }) 
                     {s.topics.map((x) => t(lang, "topic_" + x)).join(" · ")}
                     {" — "}
                     <span className="ltr">{String(s.delivery_hour).padStart(2, "0")}:00</span>
+                    {" · "}
+                    {t(lang, "colTelegram")}: {s.telegram_linked ? t(lang, "tgLinkedShort") : t(lang, "tgNotLinked")}
+                    {s.telegram_paused ? " · " + t(lang, "tgStopped") : ""}
                     {expiry ? (
                       <>
                         {" · "}
@@ -271,12 +284,12 @@ export default function Admin({ lang }: { lang: Lang; toggleLang: () => void }) 
                         <button
                           className="abtn primary"
                           disabled={busy}
-                          onClick={() => void run(s.id, "activate")}
+                          onClick={() => void run(s.id, "approve")}
                         >
-                          {t(lang, "actActivate")}
+                          {t(lang, "actApprove")}
                         </button>
-                        <button className="abtn danger" disabled={busy} onClick={() => askDelete(s)}>
-                          {t(lang, "actDelete")}
+                        <button className="abtn danger" disabled={busy} onClick={() => void run(s.id, "reject")}>
+                          {t(lang, "actReject")}
                         </button>
                       </>
                     ) : null}
